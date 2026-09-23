@@ -1,0 +1,233 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: scans
+    description: Card scan analysis
+  - name: prices
+    description: Card price observations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /scans/analyze:
+    post:
+      operationId: analyzeScan
+      tags: [scans]
+      summary: Analyze a Japanese Pokemon card photo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeScanRequest"
+      responses:
+        "200":
+          description: Card analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardAnalysis"
+        "400":
+          description: Invalid image request
+        "413":
+          description: Image is too large
+        "502":
+          description: Card analysis service unavailable
+  /cards/{cardId}/prices:
+    get:
+      operationId: getCardPrices
+      tags: [prices]
+      summary: Get site-by-site card prices
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: period
+          in: query
+          required: false
+          schema: { type: integer, enum: [7, 30, 90, 365], default: 30 }
+        - name: demo
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Site-by-site prices and transaction aggregation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardPrices"
+        "400":
+          description: Invalid period
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    AnalyzeScanRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        imageBase64:
+          type: string
+          description: Base64-encoded JPEG or PNG image, no larger than 5 MiB decoded.
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png]
+      required: [imageBase64, mimeType]
+    CardObservations:
+      type: object
+      additionalProperties: false
+      properties:
+        centering: { type: [string, "null"] }
+        corners: { type: [string, "null"] }
+        edges: { type: [string, "null"] }
+        surface: { type: [string, "null"] }
+        dirt: { type: [string, "null"] }
+        other: { type: [string, "null"] }
+      required: [centering, corners, edges, surface, dirt, other]
+    CardAnalysis:
+      type: object
+      additionalProperties: false
+      properties:
+        identified: { type: boolean }
+        cardName: { type: [string, "null"] }
+        series: { type: [string, "null"] }
+        cardNumber: { type: [string, "null"] }
+        rarity: { type: [string, "null"] }
+        conditionSummary: { type: [string, "null"] }
+        observations:
+          $ref: "#/components/schemas/CardObservations"
+      required: [identified, cardName, series, cardNumber, rarity, conditionSummary, observations]
+    PriceSourceConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        source: { type: string }
+        displayName: { type: string }
+        type: { type: string, enum: [SHOP, MARKETPLACE] }
+        capabilities:
+          type: array
+          items: { type: string, enum: [LISTING, TRANSACTION, BUYBACK] }
+      required: [source, displayName, type, capabilities]
+    PriceListing:
+      type: object
+      additionalProperties: false
+      properties:
+        source: { type: string }
+        displayName: { type: string }
+        priceType: { type: string, enum: [LISTING] }
+        price: { type: number }
+        isReference: { type: boolean }
+        lastUpdated: { type: string, format: date-time }
+        condition: { type: [string, "null"] }
+        stockStatus: { type: [string, "null"] }
+        history:
+          type: array
+          items: { $ref: "#/components/schemas/PriceHistoryPoint" }
+      required: [source, displayName, priceType, price, isReference, lastUpdated, condition, stockStatus, history]
+    PriceHistoryPoint:
+      type: object
+      additionalProperties: false
+      properties:
+        date: { type: string, format: date-time }
+        price: { type: number }
+      required: [date, price]
+    PriceTransactionSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        source: { type: string }
+        displayName: { type: string }
+        priceType: { type: string, enum: [SALE] }
+        medianPrice: { type: [number, "null"] }
+        transactionCount: { type: integer }
+        highestPrice: { type: [number, "null"] }
+        lowestPrice: { type: [number, "null"] }
+        lastUpdated: { type: [string, "null"], format: date-time }
+        history:
+          type: array
+          items: { $ref: "#/components/schemas/PriceHistoryPoint" }
+      required: [source, displayName, priceType, medianPrice, transactionCount, highestPrice, lowestPrice, lastUpdated, history]
+    PriceBuyback:
+      type: object
+      additionalProperties: false
+      properties:
+        source: { type: string }
+        displayName: { type: string }
+        priceType: { type: string, enum: [BUYBACK] }
+        price: { type: number }
+        lastUpdated: { type: string, format: date-time }
+      required: [source, displayName, priceType, price, lastUpdated]
+    PriceSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        transactionMedian: { type: [number, "null"] }
+        shopMedian: { type: [number, "null"] }
+        buybackMedian: { type: [number, "null"] }
+        transactionCount: { type: integer }
+        confidenceScore: { type: [number, "null"] }
+        highestPrice: { type: [number, "null"] }
+        lowestPrice: { type: [number, "null"] }
+        changePercent: { type: [number, "null"] }
+      required: [transactionMedian, shopMedian, buybackMedian, transactionCount, confidenceScore, highestPrice, lowestPrice, changePercent]
+    CardPrices:
+      type: object
+      additionalProperties: false
+      properties:
+        cardId: { type: string }
+        currency: { type: string, enum: [JPY] }
+        mode: { type: string, enum: [demo, live] }
+        periodDays: { type: integer, enum: [7, 30, 90, 365] }
+        marketPrice: { type: [number, "null"] }
+        reference:
+          oneOf:
+            - $ref: "#/components/schemas/PriceReference"
+            - type: "null"
+        summary: { $ref: "#/components/schemas/PriceSummary" }
+        sources:
+          type: object
+          additionalProperties: false
+          properties:
+            sales: { type: array, items: { $ref: "#/components/schemas/PriceListing" } }
+            transactions: { type: array, items: { $ref: "#/components/schemas/PriceTransactionSummary" } }
+            buybacks: { type: array, items: { $ref: "#/components/schemas/PriceBuyback" } }
+          required: [sales, transactions, buybacks]
+        sourceConfigs:
+          type: array
+          items: { $ref: "#/components/schemas/PriceSourceConfig" }
+        methodology: { type: string }
+      required: [cardId, currency, mode, periodDays, marketPrice, reference, summary, sources, sourceConfigs, methodology]
+    PriceReference:
+      type: object
+      additionalProperties: false
+      properties:
+        source: { type: string }
+        price: { type: number }
+      required: [source, price]
+
