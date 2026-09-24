@@ -56,7 +56,7 @@ export default function HomeScreen() {
         <View>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>サンプルカード</Text>
           <Text style={[styles.sectionCaption, { color: colors.mutedForeground }]}>
-            デモ用のカードです。実際の取引価格ではありません
+            カード情報はサンプルです。価格は詳細画面で実データの有無を確認できます
           </Text>
         </View>
         <Pressable accessibilityRole="button" testID="see-all-scans-button">
@@ -93,7 +93,7 @@ export default function HomeScreen() {
                 {card.number}
               </Text>
               <View style={styles.scanMeta}>
-                <Text style={[styles.price, { color: colors.mutedForeground }]}>価格はサンプル画面で確認</Text>
+                <Text style={[styles.price, { color: colors.mutedForeground }]}>価格は詳細で確認</Text>
                 <Text style={[styles.time, { color: colors.mutedForeground }]}>デモ</Text>
               </View>
             </View>

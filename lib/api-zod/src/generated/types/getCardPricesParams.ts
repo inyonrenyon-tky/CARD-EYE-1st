@@ -10,4 +10,8 @@ import type { GetCardPricesPeriod } from './getCardPricesPeriod';
 export type GetCardPricesParams = {
 period?: GetCardPricesPeriod;
 demo?: boolean;
+/**
+ * @maxLength 100
+ */
+name?: string;
 };

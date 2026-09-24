@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { CardObservations } from '@workspace/api-client-react';
+import type { CardObservations, ConditionAnalysis } from '@workspace/api-client-react';
 
 const STORAGE_KEY = 'card-eye:saved-cards:v1';
 
 export type SavedCard = {
   id: string;
+  /** Stable catalog identity; absent from cards saved before catalog matching. */
+  catalogCardId?: string | null;
   name: string;
   series: string;
   number: string;
@@ -13,11 +15,15 @@ export type SavedCard = {
   conditionSummary: string | null;
   /** Missing on cards saved before individual observations were stored. */
   observations?: CardObservations | null;
+  /** Missing on cards saved before the independent condition report was added. */
+  conditionAnalysis?: ConditionAnalysis | null;
   savedAt: string;
 };
 
 type NewSavedCard = Pick<SavedCard, 'name' | 'series' | 'number' | 'rarity' | 'conditionSummary'> & {
   observations: CardObservations | null;
+  conditionAnalysis?: ConditionAnalysis | null;
+  catalogCardId?: string | null;
 };
 export type SavedCardEdits = Pick<SavedCard, 'name' | 'series' | 'number' | 'rarity'>;
 
@@ -40,6 +46,46 @@ function isObservations(value: unknown): value is CardObservations {
   return observationKeys.every((key) => entries[key] === null || typeof entries[key] === 'string');
 }
 
+const conditionKeys = ['surface', 'corners', 'edges', 'whitening', 'centering', 'scratches'] as const;
+const conditionStatuses = ['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable'] as const;
+
+function isConditionAnalysis(value: unknown): value is ConditionAnalysis {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const report = value as Record<string, unknown>;
+  const qualityChecks = report.qualityChecks;
+  if (!qualityChecks || typeof qualityChecks !== 'object' || Array.isArray(qualityChecks)) return false;
+
+  const checks = qualityChecks as Record<string, unknown>;
+  const hasValidChecks = [
+    'wholeCardVisible',
+    'focusSufficient',
+    'strongGlare',
+    'cropped',
+    'conditionAssessable',
+  ].every((key) => typeof checks[key] === 'boolean');
+
+  return conditionKeys.every((key) => {
+    const item = report[key];
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const judgement = item as Record<string, unknown>;
+    return conditionStatuses.includes(judgement.status as (typeof conditionStatuses)[number])
+      && typeof judgement.confidence === 'number'
+      && Number.isFinite(judgement.confidence)
+      && judgement.confidence >= 0
+      && judgement.confidence <= 1
+      && typeof judgement.note === 'string';
+  })
+    && typeof report.overallConfidence === 'number'
+    && Number.isFinite(report.overallConfidence)
+    && report.overallConfidence >= 0
+    && report.overallConfidence <= 1
+    && ['acceptable', 'limited', 'unusable'].includes(report.imageQuality as string)
+    && typeof report.retakeRecommended === 'boolean'
+    && hasValidChecks
+    && Array.isArray(report.limitations)
+    && report.limitations.every((item) => typeof item === 'string');
+}
+
 function isSavedCard(value: unknown): value is SavedCard {
   if (!value || typeof value !== 'object') return false;
   const card = value as Partial<SavedCard>;
@@ -51,6 +97,9 @@ function isSavedCard(value: unknown): value is SavedCard {
     && typeof card.rarity === 'string'
     && (card.conditionSummary === null || typeof card.conditionSummary === 'string')
     && (card.observations === undefined || card.observations === null || isObservations(card.observations))
+    && (card.conditionAnalysis === undefined || card.conditionAnalysis === null || isConditionAnalysis(card.conditionAnalysis))
+    && (card.catalogCardId === undefined || card.catalogCardId === null
+      || (typeof card.catalogCardId === 'string' && /^[a-f0-9-]{36}$/i.test(card.catalogCardId)))
     && typeof card.savedAt === 'string'
     && !Number.isNaN(Date.parse(card.savedAt));
 }
@@ -116,6 +165,9 @@ export function SavedCardsProvider({ children }: { children: ReactNode }) {
     if (input.observations !== null && !isObservations(input.observations)) {
       return Promise.reject(new Error('状態メモが正しくないため保存できません。'));
     }
+    if (input.conditionAnalysis != null && !isConditionAnalysis(input.conditionAnalysis)) {
+      return Promise.reject(new Error('状態チェック結果が正しくないため保存できません。'));
+    }
     return commit((current) => {
       const card: SavedCard = {
         ...input,
@@ -143,6 +195,11 @@ export function SavedCardsProvider({ children }: { children: ReactNode }) {
         number,
         series: edits.series.trim(),
         rarity: edits.rarity.trim(),
+        catalogCardId: current[index].name === name
+          && current[index].number === number
+          && current[index].series === edits.series.trim()
+          && current[index].rarity === edits.rarity.trim()
+          ? current[index].catalogCardId : null,
       };
       const next = [...current];
       next[index] = updated;

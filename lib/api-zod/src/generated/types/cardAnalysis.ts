@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CardObservations } from './cardObservations';
+import type { CatalogMatch } from './catalogMatch';
 
 export interface CardAnalysis {
   identified: boolean;
@@ -17,6 +18,7 @@ export interface CardAnalysis {
   cardNumber: string | null;
   /** @nullable */
   rarity: string | null;
+  catalogMatch?: CatalogMatch;
   /** @nullable */
   conditionSummary: string | null;
   observations: CardObservations;

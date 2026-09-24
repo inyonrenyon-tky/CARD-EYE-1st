@@ -28,6 +28,7 @@ export function Screen({ children, scroll = true }: ScreenProps) {
       style={[styles.screen, { backgroundColor: colors.background }]}
       contentContainerStyle={contentStyle}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
       bounces
     >
       {children}

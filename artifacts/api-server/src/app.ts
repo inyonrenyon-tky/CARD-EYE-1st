@@ -5,6 +5,8 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+// API responses are dynamic; conditional 304 responses have no JSON body for clients to parse.
+app.disable("etag");
 
 app.use(
   pinoHttp({

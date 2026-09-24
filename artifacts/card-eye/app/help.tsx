@@ -43,7 +43,7 @@ export default function HelpScreen() {
         </Text>
       </View>
       <Text style={[styles.footer, { color: colors.mutedForeground }]}>
-        保存したカードと表示名は、この端末内に保存されます。アカウント同期はありません。
+        保存したカードと表示名は、この端末内に保存されます。ログインしてもカードと表示名のクラウド同期はありません。
       </Text>
     </Screen>
   );

@@ -21,7 +21,7 @@ export type PriceTransactionSummary = {
   lastUpdated: string | null; history: Array<{ date: string; price: number }>;
 };
 
-const sourceConfigs: PriceSourceConfig[] = [
+export const sourceConfigs: PriceSourceConfig[] = [
   { source: "cardrush", displayName: "カードラッシュ", type: "SHOP", capabilities: ["LISTING", "BUYBACK"] },
   { source: "hareruya2", displayName: "晴れる屋2", type: "SHOP", capabilities: ["LISTING", "BUYBACK"] },
   { source: "mercari", displayName: "メルカリ", type: "MARKETPLACE", capabilities: ["LISTING", "TRANSACTION"] },
@@ -30,7 +30,7 @@ const sourceConfigs: PriceSourceConfig[] = [
 ];
 
 const round = (value: number) => Math.round(value);
-const median = (values: number[]): number | null => {
+export const median = (values: number[]): number | null => {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);

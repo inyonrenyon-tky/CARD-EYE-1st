@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "python-base-3.13"]
 
 [deployment]
 router = "application"
@@ -21,3 +21,9 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+EXPO_PUBLIC_SUPABASE_URL = "https://oaaslfossfjsyngacuew.supabase.co"
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_pVf4D2kURjmvtfTQvC4h1A_v1Kh1Cam"

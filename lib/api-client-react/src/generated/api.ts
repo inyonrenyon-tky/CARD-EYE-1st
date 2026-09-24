@@ -23,8 +23,13 @@ import type {
   AnalyzeScanRequest,
   CardAnalysis,
   CardPrices,
+  ConditionAnalysis,
+  ConditionScanInput,
   GetCardPricesParams,
-  HealthStatus
+  HealthStatus,
+  MarketAnalysis,
+  MarketAnalysisInput,
+  SupabaseStatus
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -132,6 +137,83 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+export const getGetSupabaseStatusUrl = () => {
+
+
+
+
+  return `/api/supabase/status`
+}
+
+/**
+ * @summary Check the Supabase project connection
+ */
+export const getSupabaseStatus = async ( options?: Parameters<typeof customFetch>[1]): Promise<SupabaseStatus> => {
+
+  return customFetch<SupabaseStatus>(getGetSupabaseStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupabaseStatusQueryKey = () => {
+    return [
+    `/api/supabase/status`
+    ] as const;
+    }
+
+
+export const getGetSupabaseStatusQueryOptions = <TData = Awaited<ReturnType<typeof getSupabaseStatus>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupabaseStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupabaseStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupabaseStatus>>> = ({ signal }) => getSupabaseStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupabaseStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupabaseStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getSupabaseStatus>>>
+export type GetSupabaseStatusQueryError = ErrorType<void>
+
+
+/**
+ * @summary Check the Supabase project connection
+ */
+
+export function useGetSupabaseStatus<TData = Awaited<ReturnType<typeof getSupabaseStatus>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupabaseStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupabaseStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getAnalyzeScanUrl = () => {
 
 
@@ -218,6 +300,94 @@ export const useAnalyzeScan = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAnalyzeScanMutationOptions(options));
+    }
+
+export const getAnalyzeConditionUrl = () => {
+
+
+
+
+  return `/api/scans/condition`
+}
+
+/**
+ * @summary Assess visible card condition from one or more photos
+ */
+export const analyzeCondition = async (conditionScanInput: ConditionScanInput, options?: Parameters<typeof customFetch>[1]): Promise<ConditionAnalysis> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ConditionAnalysis>(getAnalyzeConditionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(conditionScanInput)
+  }
+);}
+
+
+
+
+
+export const getAnalyzeConditionMutationKey = () => ['analyzeCondition'] as const;
+
+export const getAnalyzeConditionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeCondition>>, TError,AnalyzeConditionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof analyzeCondition>>, TError,AnalyzeConditionMutationVariables, TContext> => {
+
+const mutationKey = getAnalyzeConditionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof analyzeCondition>>, AnalyzeConditionMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  analyzeCondition(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AnalyzeConditionMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeCondition>>>
+    export type AnalyzeConditionMutationBody = BodyType<ConditionScanInput>
+    export type AnalyzeConditionMutationError = ErrorType<void>
+    export type AnalyzeConditionMutationVariables = {data: BodyType<ConditionScanInput>}
+
+    /**
+ * @summary Assess visible card condition from one or more photos
+ */
+export const useAnalyzeCondition = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeCondition>>, TError,AnalyzeConditionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof analyzeCondition>>,
+        TError,
+        AnalyzeConditionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAnalyzeConditionMutationOptions(options));
     }
 
 export const getGetCardPricesUrl = (cardId: string,
@@ -308,4 +478,92 @@ export function useGetCardPrices<TData = Awaited<ReturnType<typeof getCardPrices
 
 
 
+
+export const getAnalyzeMarketUrl = () => {
+
+
+
+
+  return `/api/cards/market-analysis`
+}
+
+/**
+ * @summary Deterministic card market indicators and optional AI explanation
+ */
+export const analyzeMarket = async (marketAnalysisInput: MarketAnalysisInput, options?: Parameters<typeof customFetch>[1]): Promise<MarketAnalysis> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MarketAnalysis>(getAnalyzeMarketUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(marketAnalysisInput)
+  }
+);}
+
+
+
+
+
+export const getAnalyzeMarketMutationKey = () => ['analyzeMarket'] as const;
+
+export const getAnalyzeMarketMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeMarket>>, TError,AnalyzeMarketMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof analyzeMarket>>, TError,AnalyzeMarketMutationVariables, TContext> => {
+
+const mutationKey = getAnalyzeMarketMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof analyzeMarket>>, AnalyzeMarketMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  analyzeMarket(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AnalyzeMarketMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeMarket>>>
+    export type AnalyzeMarketMutationBody = BodyType<MarketAnalysisInput>
+    export type AnalyzeMarketMutationError = ErrorType<void>
+    export type AnalyzeMarketMutationVariables = {data: BodyType<MarketAnalysisInput>}
+
+    /**
+ * @summary Deterministic card market indicators and optional AI explanation
+ */
+export const useAnalyzeMarket = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeMarket>>, TError,AnalyzeMarketMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof analyzeMarket>>,
+        TError,
+        AnalyzeMarketMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAnalyzeMarketMutationOptions(options));
+    }
 

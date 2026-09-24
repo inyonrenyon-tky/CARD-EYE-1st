@@ -17,8 +17,7 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { useColors } from '@/hooks/useColors';
 import { useAnalyzeScan, type CardAnalysis } from '@workspace/api-client-react';
 import { useScan } from '@/hooks/ScanContext';
-import { Platform } from 'react-native';
-import { File } from 'expo-file-system';
+import { readPhoto } from '@/lib/readPhoto';
 
 type CardFields = {
   cardName: string;
@@ -28,40 +27,6 @@ type CardFields = {
 };
 
 const emptyCard: CardFields = { cardName: '', series: '', cardNumber: '', rarity: '' };
-
-async function readPhoto(uri: string) {
-  const path = uri.toLowerCase().split('?')[0];
-  if (/\.(heic|heif)$/.test(path)) {
-    throw new Error('HEIC画像には対応していません。JPEGまたはPNGで撮り直してください。');
-  }
-  if (Platform.OS !== 'web') {
-    const file = new File(uri);
-    if (!file.exists) throw new Error('画像を読み込めませんでした');
-    if (file.size > 5 * 1024 * 1024) throw new Error('画像が5MBを超えています。小さい画像で撮り直してください。');
-    const base64 = await file.base64();
-    const mimeType = path.endsWith('.png') ? 'image/png' as const : 'image/jpeg' as const;
-    return { imageBase64: base64, mimeType };
-  }
-  const response = await fetch(uri);
-  if (!response.ok) throw new Error('画像を読み込めませんでした');
-  const blob = await response.blob();
-  if (blob.size > 5 * 1024 * 1024) throw new Error('画像が5MBを超えています。小さい画像で撮り直してください。');
-  const mimeType = blob.type === 'image/png' || uri.toLowerCase().split('?')[0].endsWith('.png')
-    ? 'image/png' as const
-    : 'image/jpeg' as const;
-  const base64 = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = String(reader.result ?? '');
-      const comma = result.indexOf(',');
-      if (comma < 0) reject(new Error('画像データを変換できませんでした'));
-      else resolve(result.slice(comma + 1));
-    };
-    reader.onerror = () => reject(new Error('画像データを変換できませんでした'));
-    reader.readAsDataURL(blob);
-  });
-  return { imageBase64: base64, mimeType };
-}
 
 export default function AnalysisResultScreen() {
   const colors = useColors();
@@ -266,11 +231,17 @@ export default function AnalysisResultScreen() {
       >
         <View style={[styles.resultBadge, { backgroundColor: colors.positiveSoft }]}>
           <Feather name="check-circle" size={16} color={colors.positive} />
-          <Text style={[styles.resultBadgeText, { color: analysis.identified ? colors.positive : colors.warning }]}>{analysis.identified ? '識別完了' : '識別できませんでした'}</Text>
+           <Text style={[styles.resultBadgeText, { color: analysis.catalogMatch?.matchedCardId ? colors.positive : colors.warning }]}>
+             {analysis.catalogMatch?.matchedCardId ? 'カードマスター照合済み' : analysis.identified ? 'AIによる候補' : '識別できませんでした'}
+           </Text>
         </View>
-        <Text style={[styles.heading, { color: colors.foreground }]}>{analysis.identified ? 'カードを識別しました' : 'カードを特定できませんでした'}</Text>
+         <Text style={[styles.heading, { color: colors.foreground }]}>{analysis.catalogMatch?.matchedCardId ? 'カードを照合しました' : analysis.identified ? 'カードの候補を確認' : 'カードを特定できませんでした'}</Text>
         <Text style={[styles.description, { color: colors.mutedForeground }]}>
-          {analysis.identified ? 'AIによる推定結果です。内容を確認して次へ進んでください。' : 'カード情報が空欄のため、分かる範囲で入力して続けられます。'}
+           {analysis.catalogMatch?.matchedCardId
+             ? 'AIの候補をカードマスターと照合しました。内容を確認してください。'
+             : analysis.identified
+               ? 'AIによる候補です。カードマスターで確定できていません。内容を確認してください。'
+               : 'カード情報が空欄のため、分かる範囲で入力して続けられます。'}
         </Text>
 
         <View style={styles.resultRow}>
@@ -301,6 +272,12 @@ export default function AnalysisResultScreen() {
           <Text style={[styles.aiDisclaimer, { color: colors.mutedForeground }]}>
             数値の信頼度ではなく、写真からの推定結果です。内容を確認してください。
           </Text>
+           <Text style={[styles.aiDisclaimer, { color: colors.mutedForeground }]}>
+             カードマスター: {analysis.catalogMatch?.status === 'unavailable' ? '未接続'
+               : analysis.catalogMatch?.status === 'ambiguous' ? '候補が複数・要確認'
+               : analysis.catalogMatch?.status === 'unmatched' ? '一致なし'
+               : analysis.catalogMatch?.matchedCardId ? '一致' : '未照合'}
+           </Text>
         </View>
 
         <View style={styles.actionGroup}>

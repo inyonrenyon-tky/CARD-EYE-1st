@@ -88,7 +88,7 @@ export default function ProfileSettingsScreen() {
       <View style={[styles.note, { backgroundColor: colors.secondary }]}>
         <Feather name="info" size={18} color={colors.primary} />
         <Text style={[styles.noteText, { color: colors.mutedForeground }]}>
-          アカウント登録はありません。端末の変更やアプリの削除後には、表示名を引き継げません。
+          アカウントにログインしていても、表示名はこの端末だけに保存されます。端末の変更やアプリの削除後には引き継げません。
         </Text>
       </View>
     </Screen>

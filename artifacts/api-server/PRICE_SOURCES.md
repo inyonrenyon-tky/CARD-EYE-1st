@@ -1,0 +1,11 @@
+# Domestic price source status (2026-09-24)
+
+CARD EYE's live price mode currently uses verified single-card retail listings from 晴れる屋2 and ended, bid-positive Yahoo!オークション results as *separate* price categories. No Cardrush, Mercari or SNKRDUNK prices are inserted into the live median. The API's `sourceAvailability` makes missing sources explicit for each category.
+
+| Provider | Finding | Safe next requirement |
+| --- | --- | --- |
+| [カードラッシュ](https://cardrush.media/data_policy) | Its published data policy applies to `cardrush-pokemon.jp` and other owned sites. It prohibits automated price retrieval without a formal partnership, and directs applicants to its contact form. A product page sometimes returns HTTP 200, but search pages can return HTTP 403; neither response confers permission to automate retrieval. | Obtain a formal price-data partnership and an approved feed/API with matching product IDs. Do not implement page scraping or work around access controls. |
+| [SNKRDUNK](https://snkrdunk.com/terms) | Terms prohibit crawling/scraping or similar information extraction (prohibited acts item 13) and commercial use without prior consent (item 6). Product sales-history pages visible in search results did not provide reliably parseable card-specific sale price + timestamp in a normal server response. | Obtain provider-approved transaction feed and its exact card, condition, price and transaction-time schema. |
+| [メルカリ](https://static.jp.mercari.com/tos) | Public sold-out search responses rendered loading placeholders instead of completed-sale records with verified sale amount and time. `robots.txt` disallows `/v1/` and `/v2/`; no supported public completed-sale feed was established. A sold-out listing is not evidence of the final transaction amount. | Obtain a supported transaction feed with card identity, confirmed sale amount and completion time. Do not repurpose undocumented internal endpoints. |
+
+If these prerequisites are supplied, implement provider-specific mapping and validation before enabling a source. Keep listings, buyback offers and confirmed sales separate. Missing feeds must remain `unavailable`, not zero-valued observations or inferred medians.

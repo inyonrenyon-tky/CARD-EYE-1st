@@ -14,6 +14,8 @@ tags:
     description: Card scan analysis
   - name: prices
     description: Card price observations
+  - name: supabase
+    description: Supabase connection
 paths:
   /healthz:
     get:
@@ -28,6 +30,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /supabase/status:
+    get:
+      operationId: getSupabaseStatus
+      tags: [supabase]
+      summary: Check the Supabase project connection
+      responses:
+        "200":
+          description: The project API is reachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupabaseStatus"
+        "503":
+          description: The project API is unavailable
   /scans/analyze:
     post:
       operationId: analyzeScan
@@ -52,6 +68,32 @@ paths:
           description: Image is too large
         "502":
           description: Card analysis service unavailable
+  /scans/condition:
+    post:
+      operationId: analyzeCondition
+      tags: [scans]
+      summary: Assess visible card condition from one or more photos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConditionScanInput"
+      responses:
+        "200":
+          description: Visible condition and image quality assessment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConditionAnalysis"
+        "400":
+          description: Invalid image request
+        "413":
+          description: Image request is too large
+        "429":
+          description: Too many condition analyses
+        "502":
+          description: Condition analysis service unavailable
   /cards/{cardId}/prices:
     get:
       operationId: getCardPrices
@@ -70,6 +112,10 @@ paths:
           in: query
           required: false
           schema: { type: boolean, default: false }
+        - name: name
+          in: query
+          required: false
+          schema: { type: string, maxLength: 100 }
       responses:
         "200":
           description: Site-by-site prices and transaction aggregation
@@ -79,8 +125,37 @@ paths:
                 $ref: "#/components/schemas/CardPrices"
         "400":
           description: Invalid period
+  /cards/market-analysis:
+    post:
+      operationId: analyzeMarket
+      tags: [prices]
+      summary: Deterministic card market indicators and optional AI explanation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarketAnalysisInput"
+      responses:
+        "200":
+          description: Market indicators with explicit missing-data fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketAnalysis"
+        "400":
+          description: Invalid card identity or condition snapshot
+        "429":
+          description: Too many market analyses
+        "502":
+          description: Price provider unavailable
 components:
   schemas:
+    SupabaseStatus:
+      type: object
+      properties:
+        connected: { type: boolean }
+      required: [connected]
     HealthStatus:
       type: object
       properties:
@@ -99,6 +174,71 @@ components:
           type: string
           enum: [image/jpeg, image/png]
       required: [imageBase64, mimeType]
+    ConditionImage:
+      type: object
+      additionalProperties: false
+      properties:
+        imageBase64:
+          type: string
+          description: Base64-encoded JPEG or PNG image, no larger than 5 MiB decoded.
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png]
+        view:
+          type: string
+          enum: [front, back, top-left, top-right, bottom-left, bottom-right]
+      required: [imageBase64, mimeType, view]
+    ConditionScanInput:
+      type: object
+      additionalProperties: false
+      properties:
+        images:
+          type: array
+          description: Up to six photos; 5 MiB decoded in total across all photos.
+          minItems: 1
+          maxItems: 6
+          items: { $ref: "#/components/schemas/ConditionImage" }
+      required: [images]
+    ConditionJudgement:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [good, minor, moderate, significant, uncertain, not_assessable]
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        note: { type: string }
+      required: [status, confidence, note]
+    ConditionQualityChecks:
+      type: object
+      additionalProperties: false
+      properties:
+        wholeCardVisible: { type: boolean }
+        focusSufficient: { type: boolean }
+        strongGlare: { type: boolean }
+        cropped: { type: boolean }
+        conditionAssessable: { type: boolean }
+      required: [wholeCardVisible, focusSufficient, strongGlare, cropped, conditionAssessable]
+    ConditionAnalysis:
+      type: object
+      additionalProperties: false
+      properties:
+        surface: { $ref: "#/components/schemas/ConditionJudgement" }
+        corners: { $ref: "#/components/schemas/ConditionJudgement" }
+        edges: { $ref: "#/components/schemas/ConditionJudgement" }
+        whitening: { $ref: "#/components/schemas/ConditionJudgement" }
+        centering: { $ref: "#/components/schemas/ConditionJudgement" }
+        scratches: { $ref: "#/components/schemas/ConditionJudgement" }
+        overallConfidence: { type: number, minimum: 0, maximum: 1 }
+        imageQuality:
+          type: string
+          enum: [acceptable, limited, unusable]
+        retakeRecommended: { type: boolean }
+        qualityChecks: { $ref: "#/components/schemas/ConditionQualityChecks" }
+        limitations:
+          type: array
+          items: { type: string }
+      required: [surface, corners, edges, whitening, centering, scratches, overallConfidence, imageQuality, retakeRecommended, qualityChecks, limitations]
     CardObservations:
       type: object
       additionalProperties: false
@@ -119,10 +259,34 @@ components:
         series: { type: [string, "null"] }
         cardNumber: { type: [string, "null"] }
         rarity: { type: [string, "null"] }
+        catalogMatch: { $ref: "#/components/schemas/CatalogMatch" }
         conditionSummary: { type: [string, "null"] }
         observations:
           $ref: "#/components/schemas/CardObservations"
       required: [identified, cardName, series, cardNumber, rarity, conditionSummary, observations]
+    CatalogMatch:
+      type: object
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [exact, high, ambiguous, unmatched, unavailable] }
+        matchedCardId: { type: [string, "null"], format: uuid }
+        method: { type: [string, "null"] }
+        candidates:
+          type: array
+          items: { $ref: "#/components/schemas/CatalogMatchCandidate" }
+      required: [status, matchedCardId, method, candidates]
+    CatalogMatchCandidate:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        collectorNumber: { type: string }
+        setCode: { type: string }
+        setName: { type: string }
+        rarity: { type: [string, "null"] }
+        variantCode: { type: string }
+      required: [id, name, collectorNumber, setCode, setName, rarity, variantCode]
     PriceSourceConfig:
       type: object
       additionalProperties: false
@@ -134,6 +298,15 @@ components:
           type: array
           items: { type: string, enum: [LISTING, TRANSACTION, BUYBACK] }
       required: [source, displayName, type, capabilities]
+    PriceSourceAvailability:
+      type: object
+      additionalProperties: false
+      properties:
+        source: { type: string }
+        priceType: { type: string, enum: [LISTING, SALE, BUYBACK] }
+        status: { type: string, enum: [available, no_data, unavailable] }
+        reason: { type: [string, "null"] }
+      required: [source, priceType, status, reason]
     PriceListing:
       type: object
       additionalProperties: false
@@ -221,6 +394,9 @@ components:
         sourceConfigs:
           type: array
           items: { $ref: "#/components/schemas/PriceSourceConfig" }
+        sourceAvailability:
+          type: array
+          items: { $ref: "#/components/schemas/PriceSourceAvailability" }
         methodology: { type: string }
       required: [cardId, currency, mode, periodDays, marketPrice, reference, summary, sources, sourceConfigs, methodology]
     PriceReference:
@@ -230,4 +406,69 @@ components:
         source: { type: string }
         price: { type: number }
       required: [source, price]
+    MarketAnalysisInput:
+      type: object
+      additionalProperties: false
+      properties:
+        cardId: { type: string, minLength: 1, maxLength: 40 }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        condition:
+          oneOf:
+            - $ref: "#/components/schemas/ConditionAnalysis"
+            - type: "null"
+      required: [cardId, name, condition]
+    MarketEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string }
+        source: { type: string }
+        observedAt: { type: string, format: date-time }
+      required: [title, source, observedAt]
+    MarketIndicators:
+      type: object
+      additionalProperties: false
+      properties:
+        priceLevel: { type: string }
+        shortTermTrend: { type: string }
+        volatility: { type: string }
+        activity: { type: string }
+        condition: { type: string }
+        marketInfo: { type: string }
+        reliability: { type: string }
+      required: [priceLevel, shortTermTrend, volatility, activity, condition, marketInfo, reliability]
+    MarketAnalysis:
+      type: object
+      additionalProperties: false
+      properties:
+        cardId: { type: string }
+        currency: { type: string, enum: [JPY] }
+        currentPrice: { type: [number, "null"] }
+        currentPriceBasis: { type: ["string", "null"], enum: [SALE, LISTING, null] }
+        average7d: { type: [number, "null"] }
+        average30d: { type: [number, "null"] }
+        average90d: { type: [number, "null"] }
+        change7d: { type: [number, "null"] }
+        change30d: { type: [number, "null"] }
+        deviationFrom90d: { type: [number, "null"] }
+        trend: { type: string, enum: [rising, falling, stable, insufficient] }
+        volatilityPercent: { type: [number, "null"] }
+        volume7d: { type: integer }
+        volume30d: { type: integer }
+        volume90d: { type: integer }
+        volumeChangePercent: { type: [number, "null"] }
+        conditionSummary: { type: [string, "null"] }
+        marketEvents: { type: array, items: { $ref: "#/components/schemas/MarketEvent" } }
+        dataConfidence: { type: string, enum: [high, medium, low, insufficient] }
+        confidenceReasons: { type: array, items: { type: string } }
+        indicators: { $ref: "#/components/schemas/MarketIndicators" }
+        analysisSummary: { type: string }
+        aiExplanation: { type: [string, "null"] }
+        calculatedAt: { type: string, format: date-time }
+        dataAsOf: { type: [string, "null"], format: date-time }
+        dataSources: { type: array, items: { type: string } }
+        sourceAvailability: { type: array, items: { $ref: "#/components/schemas/PriceSourceAvailability" } }
+        history: { type: array, items: { $ref: "#/components/schemas/PriceHistoryPoint" } }
+        methodology: { type: string }
+      required: [cardId, currency, currentPrice, currentPriceBasis, average7d, average30d, average90d, change7d, change30d, deviationFrom90d, trend, volatilityPercent, volume7d, volume30d, volume90d, volumeChangePercent, conditionSummary, marketEvents, dataConfidence, confidenceReasons, indicators, analysisSummary, aiExplanation, calculatedAt, dataAsOf, dataSources, sourceAvailability, history, methodology]
 

@@ -22,20 +22,20 @@ export async function analyzeCardPhoto(
   mimeType: "image/jpeg" | "image/png",
 ): Promise<unknown> {
   const response = await openai.chat.completions.create({
-    model: "gpt-5.6-terra",
-    max_completion_tokens: 2048,
+    model: "gpt-5-mini",
+    max_completion_tokens: 8192,
     messages: [
       {
         role: "system",
         content:
-          "Analyze this photo as a CARD EYE Japanese Pokemon card specialist. Return only JSON matching the requested schema. Identify the card only when readable. Never guess: use null for every unreadable field. Assess visible physical condition, not a guaranteed grade or price. For conditionSummary, summarize whether the visible condition may be consistent with NM (Near Mint / NM相当の可能性), needs confirmation, or cannot be judged; never present it as a professional grade. All observation fields must be null when not visible.",
+          "Analyze this photo as a CARD EYE Japanese Pokemon card identification specialist. Return only JSON matching the requested schema. Identify the card only when readable; never guess and use null for unreadable fields. This request identifies the card only. Do not assess condition, price, grade or authenticity.",
       },
       {
         role: "user",
         content: [
           {
             type: "text",
-            text: "Identify the Japanese Pokemon card and describe its visible condition, including whether the photo may be consistent with NM (Near Mint / NM相当の可能性).",
+            text: "Identify the Japanese Pokemon card. Return its readable name, series, card number and rarity. Do not analyze physical condition.",
           },
           {
             type: "image_url",
@@ -58,8 +58,6 @@ export async function analyzeCardPhoto(
             "series",
             "cardNumber",
             "rarity",
-            "conditionSummary",
-            "observations",
           ],
           properties: {
             identified: { type: "boolean" },
@@ -67,20 +65,6 @@ export async function analyzeCardPhoto(
             series: { type: ["string", "null"] },
             cardNumber: { type: ["string", "null"] },
             rarity: { type: ["string", "null"] },
-            conditionSummary: { type: ["string", "null"] },
-            observations: {
-              type: "object",
-              additionalProperties: false,
-              required: ["centering", "corners", "edges", "surface", "dirt", "other"],
-              properties: {
-                centering: { type: ["string", "null"] },
-                corners: { type: ["string", "null"] },
-                edges: { type: ["string", "null"] },
-                surface: { type: ["string", "null"] },
-                dirt: { type: ["string", "null"] },
-                other: { type: ["string", "null"] },
-              },
-            },
           },
         },
       },
@@ -89,5 +73,13 @@ export async function analyzeCardPhoto(
 
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error("The card analysis response was empty.");
-  return JSON.parse(content) as unknown;
+  return {
+    ...(JSON.parse(content) as object),
+    // Keep legacy response fields for older clients; condition has its own endpoint.
+    conditionSummary: null,
+    observations: {
+      centering: null, corners: null, edges: null,
+      surface: null, dirt: null, other: null,
+    },
+  };
 }

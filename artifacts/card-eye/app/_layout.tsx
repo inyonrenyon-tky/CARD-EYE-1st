@@ -13,11 +13,13 @@ import {
 } from '@expo-google-fonts/inter';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as SystemUI from 'expo-system-ui';
 import { StatusBar } from 'expo-status-bar';
 import { useColors } from '@/hooks/useColors';
 import { ScanProvider } from '@/hooks/ScanContext';
 import { SavedCardsProvider } from '@/hooks/SavedCardsContext';
 import { DeviceProfileProvider } from '@/hooks/DeviceProfileContext';
+import { AuthProvider } from '@/hooks/AuthContext';
 import { setBaseUrl } from '@workspace/api-client-react';
 
 setBaseUrl(process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : null);
@@ -60,7 +62,9 @@ function RootLayoutNav() {
         <Stack.Screen name="condition-check" options={{ headerShown: false }} />
         <Stack.Screen name="price-trend" options={{ headerShown: false }} />
         <Stack.Screen name="market-overview" options={{ headerShown: false }} />
+        <Stack.Screen name="sell-timing-analysis" options={{ headerShown: false }} />
         <Stack.Screen name="profile-settings" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="help" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
@@ -81,19 +85,27 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(colors.background).catch((error) => {
+      console.warn('Could not set system background color', error);
+    });
+  }, [colors.background]);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
             <KeyboardProvider>
-              <SavedCardsProvider>
-                <DeviceProfileProvider>
-                  <ScanProvider><RootLayoutNav /></ScanProvider>
-                </DeviceProfileProvider>
-              </SavedCardsProvider>
+              <AuthProvider>
+                <SavedCardsProvider>
+                  <DeviceProfileProvider>
+                    <ScanProvider><RootLayoutNav /></ScanProvider>
+                  </DeviceProfileProvider>
+                </SavedCardsProvider>
+              </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>

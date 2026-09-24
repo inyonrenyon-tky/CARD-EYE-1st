@@ -18,6 +18,14 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary Check the Supabase project connection
+ */
+export const GetSupabaseStatusResponse = zod.object({
+  "connected": zod.boolean()
+})
+
+
+/**
  * @summary Analyze a Japanese Pokemon card photo
  */
 export const AnalyzeScanBody = zod.object({
@@ -31,6 +39,20 @@ export const AnalyzeScanResponse = zod.object({
   "series": zod.string().nullable(),
   "cardNumber": zod.string().nullable(),
   "rarity": zod.string().nullable(),
+  "catalogMatch": zod.object({
+  "status": zod.enum(['exact', 'high', 'ambiguous', 'unmatched', 'unavailable']),
+  "matchedCardId": zod.string().uuid().nullable(),
+  "method": zod.string().nullable(),
+  "candidates": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "collectorNumber": zod.string(),
+  "setCode": zod.string(),
+  "setName": zod.string(),
+  "rarity": zod.string().nullable(),
+  "variantCode": zod.string()
+}))
+}).optional(),
   "conditionSummary": zod.string().nullable(),
   "observations": zod.object({
   "centering": zod.string().nullable(),
@@ -40,6 +62,89 @@ export const AnalyzeScanResponse = zod.object({
   "dirt": zod.string().nullable(),
   "other": zod.string().nullable()
 })
+})
+
+
+/**
+ * @summary Assess visible card condition from one or more photos
+ */
+export const analyzeConditionBodyImagesMax = 6;
+
+
+
+export const AnalyzeConditionBody = zod.object({
+  "images": zod.array(zod.object({
+  "imageBase64": zod.string().describe('Base64-encoded JPEG or PNG image, no larger than 5 MiB decoded.'),
+  "mimeType": zod.enum(['image/jpeg', 'image/png']),
+  "view": zod.enum(['front', 'back', 'top-left', 'top-right', 'bottom-left', 'bottom-right'])
+})).min(1).max(analyzeConditionBodyImagesMax).describe('Up to six photos; 5 MiB decoded in total across all photos.')
+})
+
+export const analyzeConditionResponseSurfaceConfidenceMin = 0;
+export const analyzeConditionResponseSurfaceConfidenceMax = 1;
+
+export const analyzeConditionResponseCornersConfidenceMin = 0;
+export const analyzeConditionResponseCornersConfidenceMax = 1;
+
+export const analyzeConditionResponseEdgesConfidenceMin = 0;
+export const analyzeConditionResponseEdgesConfidenceMax = 1;
+
+export const analyzeConditionResponseWhiteningConfidenceMin = 0;
+export const analyzeConditionResponseWhiteningConfidenceMax = 1;
+
+export const analyzeConditionResponseCenteringConfidenceMin = 0;
+export const analyzeConditionResponseCenteringConfidenceMax = 1;
+
+export const analyzeConditionResponseScratchesConfidenceMin = 0;
+export const analyzeConditionResponseScratchesConfidenceMax = 1;
+
+export const analyzeConditionResponseOverallConfidenceMin = 0;
+export const analyzeConditionResponseOverallConfidenceMax = 1;
+
+
+
+export const AnalyzeConditionResponse = zod.object({
+  "surface": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeConditionResponseSurfaceConfidenceMin).max(analyzeConditionResponseSurfaceConfidenceMax),
+  "note": zod.string()
+}),
+  "corners": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeConditionResponseCornersConfidenceMin).max(analyzeConditionResponseCornersConfidenceMax),
+  "note": zod.string()
+}),
+  "edges": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeConditionResponseEdgesConfidenceMin).max(analyzeConditionResponseEdgesConfidenceMax),
+  "note": zod.string()
+}),
+  "whitening": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeConditionResponseWhiteningConfidenceMin).max(analyzeConditionResponseWhiteningConfidenceMax),
+  "note": zod.string()
+}),
+  "centering": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeConditionResponseCenteringConfidenceMin).max(analyzeConditionResponseCenteringConfidenceMax),
+  "note": zod.string()
+}),
+  "scratches": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeConditionResponseScratchesConfidenceMin).max(analyzeConditionResponseScratchesConfidenceMax),
+  "note": zod.string()
+}),
+  "overallConfidence": zod.number().min(analyzeConditionResponseOverallConfidenceMin).max(analyzeConditionResponseOverallConfidenceMax),
+  "imageQuality": zod.enum(['acceptable', 'limited', 'unusable']),
+  "retakeRecommended": zod.boolean(),
+  "qualityChecks": zod.object({
+  "wholeCardVisible": zod.boolean(),
+  "focusSufficient": zod.boolean(),
+  "strongGlare": zod.boolean(),
+  "cropped": zod.boolean(),
+  "conditionAssessable": zod.boolean()
+}),
+  "limitations": zod.array(zod.string())
 })
 
 
@@ -55,10 +160,14 @@ export const GetCardPricesParams = zod.object({
 
 export const getCardPricesQueryPeriodDefault = 30;
 export const getCardPricesQueryDemoDefault = false;
+export const getCardPricesQueryNameMax = 100;
+
+
 
 export const GetCardPricesQueryParams = zod.object({
   "period": zod.union([zod.literal(7),zod.literal(30),zod.literal(90),zod.literal(365)]).default(getCardPricesQueryPeriodDefault),
-  "demo": zod.coerce.boolean().default(getCardPricesQueryDemoDefault)
+  "demo": zod.coerce.boolean().default(getCardPricesQueryDemoDefault),
+  "name": zod.coerce.string().max(getCardPricesQueryNameMax).optional()
 })
 
 export const GetCardPricesResponse = zod.object({
@@ -123,6 +232,143 @@ export const GetCardPricesResponse = zod.object({
   "displayName": zod.string(),
   "type": zod.enum(['SHOP', 'MARKETPLACE']),
   "capabilities": zod.array(zod.enum(['LISTING', 'TRANSACTION', 'BUYBACK']))
+})),
+  "sourceAvailability": zod.array(zod.object({
+  "source": zod.string(),
+  "priceType": zod.enum(['LISTING', 'SALE', 'BUYBACK']),
+  "status": zod.enum(['available', 'no_data', 'unavailable']),
+  "reason": zod.string().nullable()
+})).optional(),
+  "methodology": zod.string()
+})
+
+
+/**
+ * @summary Deterministic card market indicators and optional AI explanation
+ */
+export const analyzeMarketBodyCardIdMax = 40;
+
+export const analyzeMarketBodyNameMax = 100;
+
+export const analyzeMarketBodyConditionOneSurfaceConfidenceMin = 0;
+export const analyzeMarketBodyConditionOneSurfaceConfidenceMax = 1;
+
+export const analyzeMarketBodyConditionOneCornersConfidenceMin = 0;
+export const analyzeMarketBodyConditionOneCornersConfidenceMax = 1;
+
+export const analyzeMarketBodyConditionOneEdgesConfidenceMin = 0;
+export const analyzeMarketBodyConditionOneEdgesConfidenceMax = 1;
+
+export const analyzeMarketBodyConditionOneWhiteningConfidenceMin = 0;
+export const analyzeMarketBodyConditionOneWhiteningConfidenceMax = 1;
+
+export const analyzeMarketBodyConditionOneCenteringConfidenceMin = 0;
+export const analyzeMarketBodyConditionOneCenteringConfidenceMax = 1;
+
+export const analyzeMarketBodyConditionOneScratchesConfidenceMin = 0;
+export const analyzeMarketBodyConditionOneScratchesConfidenceMax = 1;
+
+export const analyzeMarketBodyConditionOneOverallConfidenceMin = 0;
+export const analyzeMarketBodyConditionOneOverallConfidenceMax = 1;
+
+
+
+export const AnalyzeMarketBody = zod.object({
+  "cardId": zod.string().min(1).max(analyzeMarketBodyCardIdMax),
+  "name": zod.string().min(1).max(analyzeMarketBodyNameMax),
+  "condition": zod.union([zod.object({
+  "surface": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeMarketBodyConditionOneSurfaceConfidenceMin).max(analyzeMarketBodyConditionOneSurfaceConfidenceMax),
+  "note": zod.string()
+}),
+  "corners": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeMarketBodyConditionOneCornersConfidenceMin).max(analyzeMarketBodyConditionOneCornersConfidenceMax),
+  "note": zod.string()
+}),
+  "edges": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeMarketBodyConditionOneEdgesConfidenceMin).max(analyzeMarketBodyConditionOneEdgesConfidenceMax),
+  "note": zod.string()
+}),
+  "whitening": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeMarketBodyConditionOneWhiteningConfidenceMin).max(analyzeMarketBodyConditionOneWhiteningConfidenceMax),
+  "note": zod.string()
+}),
+  "centering": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeMarketBodyConditionOneCenteringConfidenceMin).max(analyzeMarketBodyConditionOneCenteringConfidenceMax),
+  "note": zod.string()
+}),
+  "scratches": zod.object({
+  "status": zod.enum(['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable']),
+  "confidence": zod.number().min(analyzeMarketBodyConditionOneScratchesConfidenceMin).max(analyzeMarketBodyConditionOneScratchesConfidenceMax),
+  "note": zod.string()
+}),
+  "overallConfidence": zod.number().min(analyzeMarketBodyConditionOneOverallConfidenceMin).max(analyzeMarketBodyConditionOneOverallConfidenceMax),
+  "imageQuality": zod.enum(['acceptable', 'limited', 'unusable']),
+  "retakeRecommended": zod.boolean(),
+  "qualityChecks": zod.object({
+  "wholeCardVisible": zod.boolean(),
+  "focusSufficient": zod.boolean(),
+  "strongGlare": zod.boolean(),
+  "cropped": zod.boolean(),
+  "conditionAssessable": zod.boolean()
+}),
+  "limitations": zod.array(zod.string())
+}),zod.null()])
+})
+
+export const AnalyzeMarketResponse = zod.object({
+  "cardId": zod.string(),
+  "currency": zod.enum(['JPY']),
+  "currentPrice": zod.number().nullable(),
+  "currentPriceBasis": zod.union([zod.literal('SALE'),zod.literal('LISTING'),zod.literal(null)]).nullable(),
+  "average7d": zod.number().nullable(),
+  "average30d": zod.number().nullable(),
+  "average90d": zod.number().nullable(),
+  "change7d": zod.number().nullable(),
+  "change30d": zod.number().nullable(),
+  "deviationFrom90d": zod.number().nullable(),
+  "trend": zod.enum(['rising', 'falling', 'stable', 'insufficient']),
+  "volatilityPercent": zod.number().nullable(),
+  "volume7d": zod.number().int(),
+  "volume30d": zod.number().int(),
+  "volume90d": zod.number().int(),
+  "volumeChangePercent": zod.number().nullable(),
+  "conditionSummary": zod.string().nullable(),
+  "marketEvents": zod.array(zod.object({
+  "title": zod.string(),
+  "source": zod.string(),
+  "observedAt": zod.coerce.date()
+})),
+  "dataConfidence": zod.enum(['high', 'medium', 'low', 'insufficient']),
+  "confidenceReasons": zod.array(zod.string()),
+  "indicators": zod.object({
+  "priceLevel": zod.string(),
+  "shortTermTrend": zod.string(),
+  "volatility": zod.string(),
+  "activity": zod.string(),
+  "condition": zod.string(),
+  "marketInfo": zod.string(),
+  "reliability": zod.string()
+}),
+  "analysisSummary": zod.string(),
+  "aiExplanation": zod.string().nullable(),
+  "calculatedAt": zod.coerce.date(),
+  "dataAsOf": zod.coerce.date().nullable(),
+  "dataSources": zod.array(zod.string()),
+  "sourceAvailability": zod.array(zod.object({
+  "source": zod.string(),
+  "priceType": zod.enum(['LISTING', 'SALE', 'BUYBACK']),
+  "status": zod.enum(['available', 'no_data', 'unavailable']),
+  "reason": zod.string().nullable()
+})),
+  "history": zod.array(zod.object({
+  "date": zod.coerce.date(),
+  "price": zod.number()
 })),
   "methodology": zod.string()
 })

@@ -35,8 +35,10 @@ export default function PriceTrendScreen() {
   const chartY = useRef(0);
   const sourcesY = useRef(0);
 
-  const { data: prices, isLoading, error } = useGetCardPrices(id ?? '', { period, demo }, {
-    query: { enabled: !!id, queryKey: getGetCardPricesQueryKey(id ?? '', { period, demo }) }
+  const priceQuery = { period, demo, name: cardName };
+  const { data: prices, isLoading, error, refetch } = useGetCardPrices(id ?? '', priceQuery, {
+    request: { cache: 'no-store' },
+    query: { enabled: !!id, queryKey: getGetCardPricesQueryKey(id ?? '', priceQuery) }
   });
 
   const toggleSourceDetails = (source: string) => {
@@ -144,6 +146,9 @@ export default function PriceTrendScreen() {
             <Text style={[styles.marketPrice, { color: colors.destructive, fontSize: 20 }]}>
               データの取得に失敗しました
             </Text>
+            <Pressable accessibilityRole="button" onPress={() => { void refetch(); }} style={{ marginTop: 16, padding: 10 }}>
+              <Text style={{ color: colors.primary, fontWeight: '700' }}>再試行</Text>
+            </Pressable>
           </View>
         ) : isLoading ? (
           <View style={[styles.marketCard, { backgroundColor: colors.card, borderColor: colors.border, paddingVertical: 40 }]}>
@@ -179,7 +184,7 @@ export default function PriceTrendScreen() {
                   </>
                 ) : (
                   <Text style={[styles.marketPrice, { color: colors.mutedForeground, fontSize: 24 }]}>
-                    データなし
+                    成約データなし
                   </Text>
                 )}
               </View>
@@ -188,7 +193,7 @@ export default function PriceTrendScreen() {
                 <View style={styles.marketStatsRow}>
                   <View style={[styles.statBox, { backgroundColor: colors.secondary }]}>
                     <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>価格信頼度</Text>
-                    <Text style={[styles.statValue, { color: colors.foreground }]}>{prices.summary.confidenceScore} / 100</Text>
+                     <Text style={[styles.statValue, { color: colors.foreground }]}>{prices.summary.confidenceScore == null ? '未評価' : `${prices.summary.confidenceScore} / 100`}</Text>
                     {demo && (
                        <Text style={{ color: colors.mutedForeground, fontSize: 10, marginTop: 4 }}>※サンプル推測値</Text>
                     )}
@@ -205,6 +210,14 @@ export default function PriceTrendScreen() {
                   {prices.summary.transactionCount}件の成約データから算出
                 </Text>
               )}
+              {prices?.summary.shopMedian != null && (
+                <Text style={[styles.marketExplanation, { color: colors.mutedForeground }]}>
+                  店舗販売価格の参考値 ¥{prices.summary.shopMedian.toLocaleString()}（成約中央値には含めません）
+                </Text>
+              )}
+              <Text style={[styles.marketExplanation, { color: colors.mutedForeground }]}>
+                {prices?.methodology}
+              </Text>
               {hasData && (
                 <Pressable accessibilityRole="button" onPress={() => {
                   setActiveTab('transactions');
@@ -305,6 +318,17 @@ export default function PriceTrendScreen() {
                   marketPrice={prices?.marketPrice}
                 />
               )}
+              {prices?.mode === 'live' && prices.sourceAvailability
+                ?.filter(item => item.priceType === ({ sales: 'LISTING', transactions: 'SALE', buybacks: 'BUYBACK' } as const)[activeTab] && item.status !== 'available')
+                .map(item => (
+                  <View key={`${item.source}-${item.priceType}`} style={{ padding: 14, borderTopWidth: 1, borderTopColor: colors.border, gap: 4 }}>
+                    <Text style={{ color: colors.foreground, fontWeight: '600' }}>
+                      {prices.sourceConfigs.find(config => config.source === item.source)?.displayName ?? item.source}
+                      {'  ·  '}{item.status === 'no_data' ? '該当データなし' : '未取得'}
+                    </Text>
+                    {item.reason && <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{item.reason}</Text>}
+                  </View>
+                ))}
             </View>
           </>
         )}
@@ -351,7 +375,7 @@ function SourceListSales({ sources, expanded, onToggle, median, period, onShowCh
               <View style={[styles.sourceDetails, { backgroundColor: colors.secondary }]}>
                 {src.condition && <DetailRow label="状態" value={src.condition} />}
                 {src.stockStatus && <DetailRow label="在庫" value={src.stockStatus} />}
-                <DetailRow label="確認日時" value={formatDateStr(src.lastUpdated)} />
+                 <DetailRow label="最新の終了日" value={formatDateStr(src.lastUpdated)} />
                 {src.history && src.history.length > 0 && (
                   <Pressable onPress={onShowChart} style={styles.showChartBtn}>
                     <Feather name="bar-chart-2" size={14} color={colors.primary} />

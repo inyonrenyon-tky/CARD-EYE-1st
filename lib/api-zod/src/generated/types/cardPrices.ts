@@ -10,6 +10,7 @@ import type { CardPricesMode } from './cardPricesMode';
 import type { CardPricesPeriodDays } from './cardPricesPeriodDays';
 import type { CardPricesSources } from './cardPricesSources';
 import type { PriceReference } from './priceReference';
+import type { PriceSourceAvailability } from './priceSourceAvailability';
 import type { PriceSourceConfig } from './priceSourceConfig';
 import type { PriceSummary } from './priceSummary';
 
@@ -24,5 +25,6 @@ export interface CardPrices {
   summary: PriceSummary;
   sources: CardPricesSources;
   sourceConfigs: PriceSourceConfig[];
+  sourceAvailability?: PriceSourceAvailability[];
   methodology: string;
 }

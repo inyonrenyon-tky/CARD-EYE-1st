@@ -5,6 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface SupabaseStatus {
+  connected: boolean;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -23,6 +27,99 @@ export interface AnalyzeScanRequest {
   mimeType: AnalyzeScanRequestMimeType;
 }
 
+export type ConditionImageMimeType = typeof ConditionImageMimeType[keyof typeof ConditionImageMimeType];
+
+
+export const ConditionImageMimeType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+} as const;
+
+export type ConditionImageView = typeof ConditionImageView[keyof typeof ConditionImageView];
+
+
+export const ConditionImageView = {
+  front: 'front',
+  back: 'back',
+  'top-left': 'top-left',
+  'top-right': 'top-right',
+  'bottom-left': 'bottom-left',
+  'bottom-right': 'bottom-right',
+} as const;
+
+export interface ConditionImage {
+  /** Base64-encoded JPEG or PNG image, no larger than 5 MiB decoded. */
+  imageBase64: string;
+  mimeType: ConditionImageMimeType;
+  view: ConditionImageView;
+}
+
+export interface ConditionScanInput {
+  /**
+     * Up to six photos; 5 MiB decoded in total across all photos.
+     * @minItems 1
+     * @maxItems 6
+     */
+  images: ConditionImage[];
+}
+
+export type ConditionJudgementStatus = typeof ConditionJudgementStatus[keyof typeof ConditionJudgementStatus];
+
+
+export const ConditionJudgementStatus = {
+  good: 'good',
+  minor: 'minor',
+  moderate: 'moderate',
+  significant: 'significant',
+  uncertain: 'uncertain',
+  not_assessable: 'not_assessable',
+} as const;
+
+export interface ConditionJudgement {
+  status: ConditionJudgementStatus;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  confidence: number;
+  note: string;
+}
+
+export interface ConditionQualityChecks {
+  wholeCardVisible: boolean;
+  focusSufficient: boolean;
+  strongGlare: boolean;
+  cropped: boolean;
+  conditionAssessable: boolean;
+}
+
+export type ConditionAnalysisImageQuality = typeof ConditionAnalysisImageQuality[keyof typeof ConditionAnalysisImageQuality];
+
+
+export const ConditionAnalysisImageQuality = {
+  acceptable: 'acceptable',
+  limited: 'limited',
+  unusable: 'unusable',
+} as const;
+
+export interface ConditionAnalysis {
+  surface: ConditionJudgement;
+  corners: ConditionJudgement;
+  edges: ConditionJudgement;
+  whitening: ConditionJudgement;
+  centering: ConditionJudgement;
+  scratches: ConditionJudgement;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  overallConfidence: number;
+  imageQuality: ConditionAnalysisImageQuality;
+  retakeRecommended: boolean;
+  qualityChecks: ConditionQualityChecks;
+  limitations: string[];
+}
+
 export interface CardObservations {
   /** @nullable */
   centering: string | null;
@@ -38,6 +135,37 @@ export interface CardObservations {
   other: string | null;
 }
 
+export type CatalogMatchStatus = typeof CatalogMatchStatus[keyof typeof CatalogMatchStatus];
+
+
+export const CatalogMatchStatus = {
+  exact: 'exact',
+  high: 'high',
+  ambiguous: 'ambiguous',
+  unmatched: 'unmatched',
+  unavailable: 'unavailable',
+} as const;
+
+export interface CatalogMatchCandidate {
+  id: string;
+  name: string;
+  collectorNumber: string;
+  setCode: string;
+  setName: string;
+  /** @nullable */
+  rarity: string | null;
+  variantCode: string;
+}
+
+export interface CatalogMatch {
+  status: CatalogMatchStatus;
+  /** @nullable */
+  matchedCardId: string | null;
+  /** @nullable */
+  method: string | null;
+  candidates: CatalogMatchCandidate[];
+}
+
 export interface CardAnalysis {
   identified: boolean;
   /** @nullable */
@@ -48,6 +176,7 @@ export interface CardAnalysis {
   cardNumber: string | null;
   /** @nullable */
   rarity: string | null;
+  catalogMatch?: CatalogMatch;
   /** @nullable */
   conditionSummary: string | null;
   observations: CardObservations;
@@ -75,6 +204,32 @@ export interface PriceSourceConfig {
   displayName: string;
   type: PriceSourceConfigType;
   capabilities: PriceSourceConfigCapabilitiesItem[];
+}
+
+export type PriceSourceAvailabilityPriceType = typeof PriceSourceAvailabilityPriceType[keyof typeof PriceSourceAvailabilityPriceType];
+
+
+export const PriceSourceAvailabilityPriceType = {
+  LISTING: 'LISTING',
+  SALE: 'SALE',
+  BUYBACK: 'BUYBACK',
+} as const;
+
+export type PriceSourceAvailabilityStatus = typeof PriceSourceAvailabilityStatus[keyof typeof PriceSourceAvailabilityStatus];
+
+
+export const PriceSourceAvailabilityStatus = {
+  available: 'available',
+  no_data: 'no_data',
+  unavailable: 'unavailable',
+} as const;
+
+export interface PriceSourceAvailability {
+  source: string;
+  priceType: PriceSourceAvailabilityPriceType;
+  status: PriceSourceAvailabilityStatus;
+  /** @nullable */
+  reason: string | null;
 }
 
 export type PriceListingPriceType = typeof PriceListingPriceType[keyof typeof PriceListingPriceType];
@@ -206,12 +361,130 @@ export interface CardPrices {
   summary: PriceSummary;
   sources: CardPricesSources;
   sourceConfigs: PriceSourceConfig[];
+  sourceAvailability?: PriceSourceAvailability[];
+  methodology: string;
+}
+
+export interface MarketAnalysisInput {
+  /**
+     * @minLength 1
+     * @maxLength 40
+     */
+  cardId: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  condition: ConditionAnalysis | null;
+}
+
+export interface MarketEvent {
+  title: string;
+  source: string;
+  observedAt: string;
+}
+
+export interface MarketIndicators {
+  priceLevel: string;
+  shortTermTrend: string;
+  volatility: string;
+  activity: string;
+  condition: string;
+  marketInfo: string;
+  reliability: string;
+}
+
+export type MarketAnalysisCurrency = typeof MarketAnalysisCurrency[keyof typeof MarketAnalysisCurrency];
+
+
+export const MarketAnalysisCurrency = {
+  JPY: 'JPY',
+} as const;
+
+/**
+ * @nullable
+ */
+export type MarketAnalysisCurrentPriceBasis = typeof MarketAnalysisCurrentPriceBasis[keyof typeof MarketAnalysisCurrentPriceBasis] | null;
+
+
+export const MarketAnalysisCurrentPriceBasis = {
+  SALE: 'SALE',
+  LISTING: 'LISTING',
+} as const;
+
+export type MarketAnalysisTrend = typeof MarketAnalysisTrend[keyof typeof MarketAnalysisTrend];
+
+
+export const MarketAnalysisTrend = {
+  rising: 'rising',
+  falling: 'falling',
+  stable: 'stable',
+  insufficient: 'insufficient',
+} as const;
+
+export type MarketAnalysisDataConfidence = typeof MarketAnalysisDataConfidence[keyof typeof MarketAnalysisDataConfidence];
+
+
+export const MarketAnalysisDataConfidence = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  insufficient: 'insufficient',
+} as const;
+
+export interface MarketAnalysis {
+  cardId: string;
+  currency: MarketAnalysisCurrency;
+  /** @nullable */
+  currentPrice: number | null;
+  /** @nullable */
+  currentPriceBasis: MarketAnalysisCurrentPriceBasis;
+  /** @nullable */
+  average7d: number | null;
+  /** @nullable */
+  average30d: number | null;
+  /** @nullable */
+  average90d: number | null;
+  /** @nullable */
+  change7d: number | null;
+  /** @nullable */
+  change30d: number | null;
+  /** @nullable */
+  deviationFrom90d: number | null;
+  trend: MarketAnalysisTrend;
+  /** @nullable */
+  volatilityPercent: number | null;
+  volume7d: number;
+  volume30d: number;
+  volume90d: number;
+  /** @nullable */
+  volumeChangePercent: number | null;
+  /** @nullable */
+  conditionSummary: string | null;
+  marketEvents: MarketEvent[];
+  dataConfidence: MarketAnalysisDataConfidence;
+  confidenceReasons: string[];
+  indicators: MarketIndicators;
+  analysisSummary: string;
+  /** @nullable */
+  aiExplanation: string | null;
+  calculatedAt: string;
+  /** @nullable */
+  dataAsOf: string | null;
+  dataSources: string[];
+  sourceAvailability: PriceSourceAvailability[];
+  history: PriceHistoryPoint[];
   methodology: string;
 }
 
 export type GetCardPricesParams = {
 period?: GetCardPricesPeriod;
 demo?: boolean;
+/**
+ * @maxLength 100
+ */
+name?: string;
 };
 
 export type GetCardPricesPeriod = typeof GetCardPricesPeriod[keyof typeof GetCardPricesPeriod];

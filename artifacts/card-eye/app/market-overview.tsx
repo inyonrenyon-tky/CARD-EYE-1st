@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Defs, LinearGradient, Stop, Line, Text as SvgText, Circle } from 'react-native-svg';
 import { CardArtwork } from '@/components/CardArtwork';
 import { useColors } from '@/hooks/useColors';
-import { getSamplePriceOverview, type PricePeriod } from '@/constants/sample-price-history';
+import { getGetCardPricesQueryKey, useGetCardPrices, type GetCardPricesPeriod } from '@workspace/api-client-react';
 
 function PriceChart({
   points,
@@ -119,8 +119,24 @@ export default function MarketOverviewScreen() {
     rarity?: string;
   }>();
 
-  const [period, setPeriod] = useState<PricePeriod>(30);
-  const data = useMemo(() => getSamplePriceOverview(period), [period]);
+  const [period, setPeriod] = useState<GetCardPricesPeriod>(30);
+  const cardId = cardNumber?.match(/(?:^|\s)(\d{1,4}\/[\w-]{2,25})$/i)?.[1];
+  const encodedId = cardId ? encodeURIComponent(cardId) : '';
+  const priceQuery = { period, demo: false, name: cardName };
+  const { data: prices, isLoading, error, refetch } = useGetCardPrices(encodedId, priceQuery, {
+    request: { cache: 'no-store' },
+    query: {
+      enabled: !!cardId && !!cardName?.trim(),
+      queryKey: getGetCardPricesQueryKey(encodedId, priceQuery),
+    },
+  });
+  const points = useMemo(
+    () => (prices?.sources.transactions ?? [])
+      .flatMap((source) => source.history)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [prices],
+  );
+  const hasIdentity = !!cardId && !!cardName?.trim();
 
   const baseTop = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
   const baseBottom = Platform.OS === 'web' ? Math.max(insets.bottom, 34) : insets.bottom;
@@ -144,7 +160,7 @@ export default function MarketOverviewScreen() {
         >
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </Pressable>
-        <Text style={[styles.topTitle, { color: colors.foreground }]}>市場相場（サンプル）</Text>
+        <Text style={[styles.topTitle, { color: colors.foreground }]}>市場相場</Text>
         <View style={styles.topSpacer} />
       </View>
 
@@ -161,7 +177,7 @@ export default function MarketOverviewScreen() {
           </View>
           <View style={styles.warningTextWrap}>
             <Text style={[styles.warningText, { color: colors.warning }]}>
-              ここに表示されているすべての価格や取引数などの数値は架空のサンプルデータです。実際の取引履歴、見積もり、査定額、または価値を保証するものではありません。
+              確認できた成約データのみで算出しています。店舗の販売価格は参考値として別表示し、査定額ではありません。
             </Text>
           </View>
         </View>
@@ -186,19 +202,46 @@ export default function MarketOverviewScreen() {
         </View>
 
         <View style={styles.priceContainer}>
-          <Text style={[styles.priceLabel, { color: colors.mutedForeground }]}>現在の参考価格（サンプル）</Text>
-          <View style={styles.priceValueRow}>
-            <Text style={[styles.priceCurrency, { color: colors.foreground }]}>¥</Text>
-            <Text style={[styles.priceValue, { color: colors.foreground }]}>{data.currentPrice.toLocaleString()}</Text>
-          </View>
-          <View style={[styles.trendBadge, { backgroundColor: colors.positiveSoft }]}>
-            <Feather name="trending-up" size={12} color={colors.positive} />
-            <Text style={[styles.trendBadgeText, { color: colors.positive }]}>データ推移例</Text>
-          </View>
+          <Text style={[styles.priceLabel, { color: colors.mutedForeground }]}>直近{period}日の成約中央値</Text>
+          {prices?.marketPrice != null ? (
+            <View style={styles.priceValueRow}>
+              <Text style={[styles.priceCurrency, { color: colors.foreground }]}>¥</Text>
+              <Text style={[styles.priceValue, { color: colors.foreground }]}>{prices.marketPrice.toLocaleString()}</Text>
+            </View>
+          ) : (
+            <Text style={[styles.priceLabel, { color: error ? colors.destructive : colors.mutedForeground }]}>
+              {!hasIdentity ? '価格の確認にはカード名と番号が必要です'
+                : error ? '価格の取得に失敗しました'
+                : isLoading ? '価格を確認中...' : '確認できた成約データがありません'}
+            </Text>
+          )}
+          {prices?.summary.shopMedian != null && (
+            <Text style={[styles.priceLabel, { color: colors.mutedForeground }]}>
+              店舗販売価格の参考値 ¥{prices.summary.shopMedian.toLocaleString()}（成約価格には含めません）
+            </Text>
+          )}
+          {prices?.marketPrice != null && (
+            <View style={[styles.trendBadge, { backgroundColor: colors.positiveSoft }]}>
+              <Feather name="trending-up" size={12} color={colors.positive} />
+              <Text style={[styles.trendBadgeText, { color: colors.positive }]}>
+                確認済み成約 {prices.summary.transactionCount}件
+              </Text>
+            </View>
+          )}
+          {error && (
+            <Pressable accessibilityRole="button" onPress={() => { void refetch(); }} style={{ padding: 10 }}>
+              <Text style={{ color: colors.primary, fontWeight: '700' }}>再試行</Text>
+            </Pressable>
+          )}
+          {prices?.methodology && (
+            <Text style={[styles.warningText, { color: colors.mutedForeground }]}>
+              {prices.methodology}
+            </Text>
+          )}
         </View>
 
         <View style={[styles.periodToggle, { backgroundColor: colors.secondary }]}>
-          {([7, 30, 90, 180] as PricePeriod[]).map((p) => (
+          {([7, 30, 90, 365] as const).map((p) => (
             <Pressable
               key={p}
               accessibilityRole="tab"
@@ -221,25 +264,39 @@ export default function MarketOverviewScreen() {
         </View>
 
         <View style={[styles.chartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <PriceChart points={data.points} width={chartWidth} strokeColor={colors.primary} />
+          {points.length ? (
+            <PriceChart points={points} width={chartWidth} strokeColor={colors.primary} />
+          ) : (
+            <Text style={[styles.warningText, { color: colors.mutedForeground }]}>
+              成約履歴がないため価格推移は表示できません
+            </Text>
+          )}
         </View>
 
         <View style={styles.statsContainer}>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-             <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>サンプル最高値</Text>
-             <Text style={[styles.statValue, { color: colors.foreground }]}>¥{data.highestPrice.toLocaleString()}</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>最高成約</Text>
+            <Text style={[styles.statValue, { color: colors.foreground }]}>
+              {prices?.summary.highestPrice != null ? `¥${prices.summary.highestPrice.toLocaleString()}` : 'データなし'}
+            </Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-             <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>サンプル最安値</Text>
-             <Text style={[styles.statValue, { color: colors.foreground }]}>¥{data.lowestPrice.toLocaleString()}</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>最低成約</Text>
+            <Text style={[styles.statValue, { color: colors.foreground }]}>
+              {prices?.summary.lowestPrice != null ? `¥${prices.summary.lowestPrice.toLocaleString()}` : 'データなし'}
+            </Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-             <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>サンプル平均値</Text>
-             <Text style={[styles.statValue, { color: colors.foreground }]}>¥{data.averagePrice.toLocaleString()}</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>店舗販売参考</Text>
+            <Text style={[styles.statValue, { color: colors.foreground }]}>
+              {prices?.summary.shopMedian != null ? `¥${prices.summary.shopMedian.toLocaleString()}` : 'データなし'}
+            </Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-             <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>サンプル取引数</Text>
-             <Text style={[styles.statValue, { color: colors.foreground }]}>{data.transactionCount.toLocaleString()}件</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>確認済み成約数</Text>
+            <Text style={[styles.statValue, { color: colors.foreground }]}>
+              {prices?.summary.transactionCount ?? 0}件
+            </Text>
           </View>
         </View>
       </ScrollView>

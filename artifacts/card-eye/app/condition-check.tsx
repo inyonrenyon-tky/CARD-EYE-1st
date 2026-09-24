@@ -1,14 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CardArtwork } from '@/components/CardArtwork';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
 import { useScan } from '@/hooks/ScanContext';
 import { useSavedCards } from '@/hooks/SavedCardsContext';
-import type { CardAnalysis } from '@workspace/api-client-react';
+import { readPhoto } from '@/lib/readPhoto';
+import { useAnalyzeCondition, type ConditionAnalysis } from '@workspace/api-client-react';
 
 type IconName =
   | 'maximize'
@@ -16,35 +17,48 @@ type IconName =
   | 'square'
   | 'sun'
   | 'droplet'
-  | 'more-horizontal';
+  | 'edit-2';
 
+type ItemKey = 'surface' | 'corners' | 'edges' | 'whitening' | 'centering' | 'scratches';
 type Evaluation = {
-  key: string;
+  key: ItemKey;
   label: string;
   value: string;
   icon: IconName;
-  status: 'positive' | 'caution' | 'neutral';
+  status: ConditionAnalysis['surface']['status'];
   detail: string;
+  confidence: number;
 };
 
-const evaluationMeta: Array<{ key: keyof CardAnalysis['observations']; label: string; icon: IconName }> = [
-  { key: 'centering', label: 'センタリング', icon: 'maximize' },
+const evaluationMeta: Array<{ key: ItemKey; label: string; icon: IconName }> = [
+  { key: 'surface', label: '表面', icon: 'sun' },
   { key: 'corners', label: '角', icon: 'corner-up-left' },
   { key: 'edges', label: 'エッジ', icon: 'square' },
-  { key: 'surface', label: '表面', icon: 'sun' },
-  { key: 'dirt', label: '白かけ', icon: 'droplet' },
-  { key: 'other', label: 'その他', icon: 'more-horizontal' },
+  { key: 'whitening', label: '白かけ', icon: 'droplet' },
+  { key: 'centering', label: 'センタリング', icon: 'maximize' },
+  { key: 'scratches', label: '傷', icon: 'edit-2' },
 ];
-/*
- * Observation text is intentionally displayed verbatim: the API is the source
- * of truth and a single photograph cannot establish a professional grade.
- */
-function buildEvaluations(observations: CardAnalysis['observations'] | undefined): Evaluation[] {
+const statusLabels: Record<Evaluation['status'], string> = {
+  good: '目立つ問題は確認できません',
+  minor: '軽微な状態変化',
+  moderate: '状態変化あり',
+  significant: '目立つ損傷あり',
+  uncertain: '判定が不確か',
+  not_assessable: '画像から判定できません',
+};
+const qualityLabels: Record<ConditionAnalysis['imageQuality'], string> = {
+  acceptable: '画像から確認できる範囲で判定',
+  limited: '一部の判定が困難',
+  unusable: 'この画像では判定困難',
+};
+
+function buildEvaluations(condition: ConditionAnalysis): Evaluation[] {
   return evaluationMeta.map((item) => ({
     ...item,
-    value: observations?.[item.key] ?? '画像からは判断できません',
-    status: observations?.[item.key] ? 'neutral' : 'neutral',
-    detail: observations?.[item.key] ?? 'この項目は写真から確認できませんでした。',
+    value: statusLabels[condition[item.key].status],
+    status: condition[item.key].status,
+    detail: condition[item.key].note,
+    confidence: condition[item.key].confidence,
   }));
 }
 export default function ConditionCheckScreen() {
@@ -58,15 +72,48 @@ export default function ConditionCheckScreen() {
     cardNumber?: string;
     rarity?: string;
   }>();
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const analyzeCondition = useAnalyzeCondition();
+  const [condition, setCondition] = useState<ConditionAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [conditionError, setConditionError] = useState<string | null>(null);
+  const requestedUri = useRef<string | null>(null);
+  const requestId = useRef(0);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const analysis = scanUri && (!uri || uri === scanUri) ? savedAnalysis : null;
-  const evaluations = buildEvaluations(analysis?.observations);
   const displayUri = uri || scanUri;
+  const evaluations = condition ? buildEvaluations(condition) : [];
   const name = (cardName || analysis?.cardName || '').trim();
   const number = (cardNumber || analysis?.cardNumber || '').trim();
-  const canSave = isLoaded && !storageError && !!name && !!number && !isSaving;
+  const canSave = isLoaded && !storageError && !!name && !!number && !isSaving
+    && !isAnalyzing && (!!condition || !!conditionError || !displayUri);
+
+  const runCondition = async (photoUri: string) => {
+    const currentId = ++requestId.current;
+    setCondition(null);
+    setConditionError(null);
+    setIsAnalyzing(true);
+    try {
+      const photo = await readPhoto(photoUri);
+      const result = await analyzeCondition.mutateAsync({ data: { images: [{ ...photo, view: 'front' }] } });
+      if (currentId === requestId.current) setCondition(result);
+    } catch (error) {
+      if (currentId === requestId.current) {
+        setConditionError(error instanceof Error && /HEIC|5MB|画像を読み込めませんでした/.test(error.message)
+          ? error.message
+          : '状態を解析できませんでした。通信状態や写真を確認し、再試行してください。');
+      }
+    } finally {
+      if (currentId === requestId.current) setIsAnalyzing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!displayUri || requestedUri.current === displayUri) return;
+    requestedUri.current = displayUri;
+    setCondition(null);
+    void runCondition(displayUri);
+  }, [displayUri]);
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -78,8 +125,14 @@ export default function ConditionCheckScreen() {
         number,
         series: analysis?.series || '',
         rarity: rarity || analysis?.rarity || '',
-        conditionSummary: analysis?.conditionSummary ?? null,
-        observations: analysis?.observations ?? null,
+        catalogCardId: analysis?.catalogMatch?.matchedCardId
+          && name === analysis.cardName?.trim()
+          && number === analysis.cardNumber?.trim()
+          && (rarity || analysis.rarity || '') === (analysis.rarity || '')
+          ? analysis.catalogMatch.matchedCardId : null,
+        conditionSummary: null,
+        observations: null,
+        conditionAnalysis: condition,
       });
       router.replace('/collection');
     } catch (error) {
@@ -89,11 +142,10 @@ export default function ConditionCheckScreen() {
     }
   };
 
-  const statusColor = (status: Evaluation['status']) => {
-    if (status === 'positive') return colors.positive;
-    if (status === 'caution') return colors.warning;
-    return colors.mutedForeground;
-  };
+  const statusColor = (status: Evaluation['status']) =>
+    status === 'good' ? colors.positive
+      : status === 'minor' || status === 'moderate' ? colors.warning
+      : status === 'significant' ? colors.destructive : colors.mutedForeground;
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -131,93 +183,119 @@ export default function ConditionCheckScreen() {
 
         <View style={styles.headingBlock}>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>CONDITION CHECK</Text>
-          <Text style={[styles.heading, { color: colors.foreground }]}>カードの状態を確認</Text>
+          <Text style={[styles.heading, { color: colors.foreground }]}>カード状態チェック</Text>
           <Text style={[styles.description, { color: colors.mutedForeground }]}>
-            {analysis
-              ? '撮影画像から読み取れる範囲で状態を推定しています。単一写真のため、実物の状態や鑑定結果は保証できません。'
-              : 'カードを解析すると、撮影画像から読み取れる観察結果を表示します。'}
+            撮影した1枚の写真から、見える部分だけを確認します。裏面や写っていない部分は判定できません。
           </Text>
         </View>
 
-        <View style={[styles.overallCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.overallHeader}>
-            <View style={[styles.overallIcon, { backgroundColor: colors.positiveSoft }]}>
-              <Feather name="shield" size={22} color={colors.positive} />
-            </View>
-            <View style={styles.overallCopy}>
-              <Text style={[styles.overallLabel, { color: colors.mutedForeground }]}>NM相当の可能性</Text>
-              <Text style={[styles.overallValue, { color: colors.foreground }]}>
-                {analysis?.conditionSummary ?? '写真からは判断できません'}
-              </Text>
-            </View>
-            <View style={[styles.aiPill, { backgroundColor: colors.accent }]}>
-              <Text style={[styles.aiPillText, { color: colors.primary }]}>AI推定</Text>
-            </View>
+        {isAnalyzing ? (
+          <View style={[styles.overallCard, styles.loadingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={[styles.overallValue, { color: colors.foreground }]}>画像の状態とカードを確認中...</Text>
           </View>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>評価項目</Text>
-          <Text style={[styles.sectionCaption, { color: colors.mutedForeground }]}>6項目</Text>
-        </View>
-
-        <View style={styles.evaluationList}>
-          {evaluations.map((item) => {
-            const isExpanded = expandedKey === item.key;
-            const accent = statusColor(item.status);
-
-            return (
-              <View
-                key={item.key}
-                style={[styles.evaluationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        ) : null}
+        {!displayUri || conditionError ? (
+          <View style={[styles.overallCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.description, { color: colors.mutedForeground }]}>
+              {conditionError || '解析する写真がありません。もう一度撮影してください。'}
+            </Text>
+            {displayUri ? (
+              <Pressable
+                accessibilityRole="button"
+                testID="condition-retry-button"
+                onPress={() => void runCondition(displayUri)}
+                style={[styles.inlineButton, { backgroundColor: colors.secondary }]}
               >
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${item.label}の詳細を見る`}
-                  accessibilityState={{ expanded: isExpanded }}
-                  aria-expanded={isExpanded}
+                <Feather name="rotate-cw" size={16} color={colors.foreground} />
+                <Text style={{ color: colors.foreground }}>もう一度解析する</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+        {condition ? (
+          <View style={[styles.overallCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.overallHeader}>
+              <View style={[styles.overallIcon, { backgroundColor: condition.retakeRecommended ? colors.warningSoft : colors.positiveSoft }]}>
+                <Feather name={condition.retakeRecommended ? 'alert-triangle' : 'eye'} size={22} color={condition.retakeRecommended ? colors.warning : colors.positive} />
+              </View>
+              <View style={styles.overallCopy}>
+                <Text style={[styles.overallLabel, { color: colors.mutedForeground }]}>画像品質</Text>
+                <Text style={[styles.overallValue, { color: colors.foreground }]}>
+                  {qualityLabels[condition.imageQuality]}
+                </Text>
+              </View>
+              <View style={[styles.aiPill, { backgroundColor: colors.accent }]}>
+                <Text style={[styles.aiPillText, { color: colors.primary }]}>AI推定</Text>
+              </View>
+            </View>
+            <Text style={[styles.qualityDetail, { color: colors.mutedForeground }]}>
+              判定への確信度 {Math.round(condition.overallConfidence * 100)}%（画質の点数ではありません）
+            </Text>
+            {condition.imageQuality === 'unusable' ? (
+              <Text style={[styles.qualityDetail, { color: colors.warning }]}>
+                状態を正確に確認できません。もう一度撮影してください。
+              </Text>
+            ) : null}
+            {condition.limitations.map((reason, index) => (
+              <Text key={`${index}-${reason}`} style={[styles.qualityDetail, { color: colors.mutedForeground }]}>・{reason}</Text>
+            ))}
+            {condition.retakeRecommended ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="写真を撮り直す"
+                testID="condition-retake-button"
+                onPress={() => router.replace('/scan')}
+                style={[styles.inlineButton, { backgroundColor: colors.warningSoft }]}
+              >
+                <Feather name="camera" size={16} color={colors.warning} />
+                <Text style={{ color: colors.foreground }}>明るい場所でカード全体を撮り直す</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {condition ? (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>画像からの観察結果</Text>
+              <Text style={[styles.sectionCaption, { color: colors.mutedForeground }]}>6項目</Text>
+            </View>
+
+            <View style={styles.evaluationList}>
+              {evaluations.map((item) => (
+                <View
+                  key={item.key}
                   testID={`condition-item-${item.key}`}
-                  onPress={() => setExpandedKey(isExpanded ? null : item.key)}
-                  style={({ pressed }) => [styles.evaluationRow, { opacity: pressed ? 0.72 : 1 }]}
+                  style={[styles.evaluationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
                 >
-                  <View style={[styles.evaluationIcon, { backgroundColor: colors.secondary }]}>
-                    <Feather name={item.icon} size={18} color={accent} />
+                  <View style={styles.evaluationRow}>
+                    <View style={[styles.evaluationIcon, { backgroundColor: colors.secondary }]}>
+                      <Feather name={item.icon} size={18} color={statusColor(item.status)} />
+                    </View>
+                    <View style={styles.evaluationCopy}>
+                      <Text style={[styles.evaluationLabel, { color: colors.mutedForeground }]}>{item.label}</Text>
+                      <Text style={[styles.evaluationValue, { color: statusColor(item.status) }]}>{item.value}</Text>
+                    </View>
                   </View>
-                  <View style={styles.evaluationCopy}>
-                    <Text style={[styles.evaluationLabel, { color: colors.mutedForeground }]}>
-                      {item.label}
-                    </Text>
-                    <Text style={[styles.evaluationValue, { color: colors.foreground }]}>
-                      {item.value}
-                    </Text>
-                  </View>
-                  <View style={styles.detailAction}>
-                    <Text style={[styles.detailText, { color: colors.primary }]}>
-                      {isExpanded ? '閉じる' : '詳細を見る'}
-                    </Text>
-                    <Feather
-                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                      size={15}
-                      color={colors.primary}
-                    />
-                  </View>
-                </Pressable>
-                {isExpanded ? (
                   <View style={[styles.detailBox, { borderTopColor: colors.border }]}>
-                    <Text style={[styles.detailDescription, { color: colors.mutedForeground }]}>
+                    <Text style={[styles.detailDescription, { color: colors.foreground }]}>
                       {item.detail}
                     </Text>
+                    <Text style={[styles.confidenceText, { color: colors.mutedForeground }]}>
+                      判定への確信度 {Math.round(item.confidence * 100)}%
+                    </Text>
                   </View>
-                ) : null}
-              </View>
-            );
-          })}
-        </View>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         <View style={[styles.warning, { backgroundColor: colors.secondary }]}>
           <Feather name="alert-circle" size={18} color={colors.primary} />
           <Text style={[styles.warningText, { color: colors.mutedForeground }]}>
-            AIによる画像上の推定です。実物の状態や専門鑑定機関による鑑定結果を保証するものではありません。
+            この結果は撮影画像から確認できる範囲をAIが推定したもので、専門鑑定機関による鑑定結果を示すものではありません。写っていない箇所の状態や真贋は判断できません。
           </Text>
         </View>
 
@@ -234,12 +312,17 @@ export default function ConditionCheckScreen() {
         >
           <Feather name="bookmark" size={18} color={colors.foreground} />
           <Text style={[styles.saveButtonText, { color: colors.foreground }]}>
-            {isSaving ? '保存中...' : 'コレクションに保存'}
+            {isSaving ? '保存中...' : isAnalyzing ? '状態の解析中...' : condition ? 'コレクションに保存' : 'カード情報のみ保存'}
           </Text>
         </Pressable>
         {!name || !number ? (
           <Text style={[styles.saveHint, { color: colors.mutedForeground }]}>
             保存にはカード名とカード番号が必要です。前の画面で情報を修正してください。
+          </Text>
+        ) : null}
+        {!condition ? (
+          <Text style={[styles.saveHint, { color: colors.mutedForeground }]}>
+            状態判定がない場合、カード情報のみ保存されます。解析中は完了するまでお待ちください。
           </Text>
         ) : null}
         {storageError || saveError ? (
@@ -307,11 +390,14 @@ const styles = StyleSheet.create({
   heading: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
   description: { fontSize: 13, lineHeight: 20 },
   overallCard: { width: '100%', borderWidth: 1, borderRadius: 20, padding: 16 },
+  loadingCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   overallHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   overallIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   overallCopy: { flex: 1, gap: 4 },
   overallLabel: { fontSize: 11 },
   overallValue: { fontSize: 17, fontWeight: '700' },
+  qualityDetail: { fontSize: 12, lineHeight: 19, marginTop: 10 },
+  inlineButton: { minHeight: 44, borderRadius: 12, paddingHorizontal: 12, marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   aiPill: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6 },
   aiPillText: { fontSize: 10, fontWeight: '700' },
   sectionHeader: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -324,10 +410,9 @@ const styles = StyleSheet.create({
   evaluationCopy: { flex: 1, gap: 4 },
   evaluationLabel: { fontSize: 11 },
   evaluationValue: { fontSize: 13, fontWeight: '700' },
-  detailAction: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  detailText: { fontSize: 10, fontWeight: '700' },
   detailBox: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 13, paddingVertical: 12 },
   detailDescription: { fontSize: 12, lineHeight: 18 },
+  confidenceText: { fontSize: 11, marginTop: 5 },
   warning: { width: '100%', borderRadius: 15, padding: 13, flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
   warningText: { flex: 1, fontSize: 11, lineHeight: 17 },
   saveButton: { width: '100%', minHeight: 54, borderRadius: 17, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
