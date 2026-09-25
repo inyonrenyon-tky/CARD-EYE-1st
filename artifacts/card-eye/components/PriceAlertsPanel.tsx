@@ -6,6 +6,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { getCardPrices } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import { useSavedCards } from '@/hooks/SavedCardsContext';
+import { designTokens } from '@/constants/design-tokens';
 import {
   ALERTS_STORAGE_KEY, MAX_PRICE_ALERTS, evaluatePriceAlert, parsePriceAlerts,
   type PriceAlert, type PriceQuote,
@@ -17,7 +18,8 @@ const directionName = (direction: PriceAlert['direction']) => direction === 'abo
 
 function quoteFromPrices(prices: Awaited<ReturnType<typeof getCardPrices>>, basis: PriceAlert['basis']): PriceQuote | null {
   if (basis === 'SALE') {
-    const available = prices.sources.transactions.filter((item) => item.lastUpdated !== null && item.transactionCount > 0);
+    const available = prices.sources.transactions.filter((item) =>
+      item.source !== 'yahoo_auction' && item.lastUpdated !== null && item.transactionCount > 0);
     const source = [...available]
       .sort((a, b) => (b.lastUpdated ?? '').localeCompare(a.lastUpdated ?? ''))[0];
     return prices.marketPrice !== null
@@ -294,7 +296,10 @@ export function PriceAlertsPanel() {
               {cards.map((card) => (
                 <Pressable key={card.id} accessibilityRole="button" accessibilityState={{ selected: selectedCardId === card.id }}
                   onPress={() => setSelectedCardId(card.id)}
-                  style={[styles.choice, { borderColor: selectedCardId === card.id ? colors.primary : colors.border, backgroundColor: colors.card }]}>
+                   style={[styles.choice, {
+                     borderColor: selectedCardId === card.id ? colors.primary : colors.border,
+                     backgroundColor: selectedCardId === card.id ? colors.surfaceHighlight : colors.card,
+                   }]}>
                   <Text style={[styles.choiceText, { color: colors.foreground }]}>{card.name} · {card.number}</Text>
                 </Pressable>
               ))}
@@ -302,7 +307,10 @@ export function PriceAlertsPanel() {
               <View style={styles.options}>
                 {(['SALE', 'LISTING'] as const).map((value) => (
                   <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: basis === value }}
-                    onPress={() => setBasis(value)} style={[styles.option, { borderColor: basis === value ? colors.primary : colors.border, backgroundColor: colors.card }]}>
+                     onPress={() => setBasis(value)} style={[styles.option, {
+                       borderColor: basis === value ? colors.primary : colors.border,
+                       backgroundColor: basis === value ? colors.accent : colors.card,
+                     }]}>
                     <Text style={[styles.description, { color: colors.foreground }]}>{basisName(value)}</Text>
                   </Pressable>
                 ))}
@@ -311,7 +319,10 @@ export function PriceAlertsPanel() {
               <View style={styles.options}>
                 {(['above', 'below'] as const).map((value) => (
                   <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: direction === value }}
-                    onPress={() => setDirection(value)} style={[styles.option, { borderColor: direction === value ? colors.primary : colors.border, backgroundColor: colors.card }]}>
+                     onPress={() => setDirection(value)} style={[styles.option, {
+                       borderColor: direction === value ? colors.primary : colors.border,
+                       backgroundColor: direction === value ? colors.accent : colors.card,
+                     }]}>
                     <Text style={[styles.description, { color: colors.foreground }]}>{directionName(value)}</Text>
                   </Pressable>
                 ))}
@@ -334,33 +345,33 @@ export function PriceAlertsPanel() {
 }
 
 const styles = StyleSheet.create({
-  intro: { borderWidth: 1, borderRadius: 20, padding: 18, gap: 12 },
+  intro: { borderWidth: 1, borderRadius: designTokens.radius.card, padding: 18, gap: 12, ...designTokens.shadows.soft },
   introTitle: { fontSize: 18, fontWeight: '700' },
   description: { fontSize: 12, lineHeight: 19 },
   primaryButton: { minHeight: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   primaryText: { fontSize: 14, fontWeight: '700' },
-  limitNotice: { flexDirection: 'row', gap: 10, padding: 14, borderWidth: 1, borderRadius: 15, alignItems: 'flex-start' },
-  reachedBanner: { padding: 14, borderRadius: 14, fontSize: 13, lineHeight: 20 },
+  limitNotice: { flexDirection: 'row', gap: 10, padding: 14, borderWidth: 1, borderRadius: designTokens.radius.medium, alignItems: 'flex-start' },
+  reachedBanner: { padding: 14, borderRadius: designTokens.radius.medium, fontSize: 13, lineHeight: 20 },
   message: { fontSize: 13, lineHeight: 20 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { fontSize: 18, fontWeight: '700' },
   empty: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 20, minHeight: 170, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 20 },
-  rule: { borderWidth: 1, borderRadius: 17, padding: 16, gap: 12 },
+  rule: { borderWidth: 1, borderRadius: designTokens.radius.medium, padding: 16, gap: 12, ...designTokens.shadows.soft },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   fill: { flex: 1 },
   ruleTitle: { fontSize: 16, fontWeight: '700', marginBottom: 3 },
-  badge: { fontSize: 11, overflow: 'hidden', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5 },
+  badge: { fontSize: 11, overflow: 'hidden', borderRadius: designTokens.radius.pill, paddingHorizontal: 10, paddingVertical: 6, fontWeight: '600' },
   target: { fontSize: 24, fontWeight: '700' },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 18, marginTop: 2 },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 18, marginTop: 2, minHeight: 30 },
   actionText: { fontSize: 13, fontWeight: '700' },
   refresh: { borderWidth: 1, borderRadius: 14, flexDirection: 'row', minHeight: 46, gap: 8, alignItems: 'center', justifyContent: 'center' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'flex-end' },
-  editor: { maxHeight: '88%', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 20, gap: 14 },
+  editor: { maxHeight: '88%', borderTopLeftRadius: designTokens.radius.hero, borderTopRightRadius: designTokens.radius.hero, borderWidth: 1, padding: 20, gap: 14 },
   editorScroll: { flexGrow: 0 },
   fieldLabel: { fontSize: 13, fontWeight: '700', marginTop: 16, marginBottom: 8 },
-  choice: { borderWidth: 1, borderRadius: 12, padding: 11, marginBottom: 6 },
+  choice: { borderWidth: 1, borderRadius: designTokens.radius.small, padding: 12, marginBottom: 7, minHeight: 46, justifyContent: 'center' },
   choiceText: { fontSize: 13 },
   options: { flexDirection: 'row', gap: 8 },
-  option: { flex: 1, borderWidth: 1, borderRadius: 11, minHeight: 42, padding: 8, alignItems: 'center', justifyContent: 'center' },
-  input: { borderWidth: 1, borderRadius: 11, paddingHorizontal: 13, minHeight: 46, fontSize: 16 },
+  option: { flex: 1, borderWidth: 1, borderRadius: designTokens.radius.pill, minHeight: 44, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  input: { borderWidth: 1, borderRadius: designTokens.radius.small, paddingHorizontal: 13, minHeight: 48, fontSize: 16 },
 });

@@ -1,17 +1,19 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CardThumbnail } from '@/components/CardThumbnail';
+import { anniversaryCards } from '@/lib/anniversaryCards';
+import { getCollectorNumber } from '@/lib/collectorNumber';
+import { RepresentativePrice, useRepresentativePrice } from '@/components/RepresentativePrice';
 import { useColors } from '@/hooks/useColors';
 import { useSavedCards, type SavedCardEdits } from '@/hooks/SavedCardsContext';
 import { useScan } from '@/hooks/ScanContext';
+import { designTokens } from '@/constants/design-tokens';
 import {
   customFetch,
-  getGetCardPricesQueryKey,
-  useGetCardPrices,
   type CardObservations,
   type ConditionAnalysis,
 } from '@workspace/api-client-react';
@@ -80,7 +82,7 @@ function conditionCountLabel(count: unknown): string {
   }
 }
 
-export default function CardDetailScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id, scanId: routeScanId } = useLocalSearchParams<{ id?: string; scanId?: string }>();
@@ -91,6 +93,7 @@ export default function CardDetailScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const savedCard = cards.find((item) => item.id === id);
+  const anniversaryCard = anniversaryCards.find((item) => item.id === id);
   const catalogId = isCatalogUuid(id) ? id : savedCard?.catalogCardId ?? null;
   const catalogQuery = useQuery({
     queryKey: ['catalog-card', catalogId],
@@ -120,37 +123,36 @@ export default function CardDetailScreen() {
           scannedAt: 'カードマスター',
           tone: 'blue' as const,
         }
-      : null;
+      : anniversaryCard
+        ? {
+            id: anniversaryCard.id,
+            name: anniversaryCard.name,
+            number: anniversaryCard.cardNumber,
+            series: anniversaryCard.series,
+            rarity: anniversaryCard.rarity,
+            scannedAt: '30周年公式発表',
+            tone: 'blue' as const,
+          }
+        : null;
 
-  const isCatalogCard = !savedCard && !!catalogCard;
-  const priceId = catalogId
-    ?? (savedCard?.number ?? '').match(/(?:^|\s)(\d{1,4}\/[\w-]{2,25})$/i)?.[1]
-    ?? '';
-  const priceQuery = { period: 90 as const, demo: false, name: card?.name };
-  const { data: prices, isLoading, error, refetch } = useGetCardPrices(
-    encodeURIComponent(priceId),
-    priceQuery,
-    { request: { cache: 'no-store' }, query: {
-      enabled: isLoaded && !loadError && !!priceId && (!!savedCard || !!catalogCard),
-      queryKey: getGetCardPricesQueryKey(encodeURIComponent(priceId), priceQuery),
-    } },
-  );
+  const isReferenceCard = !savedCard && !!(catalogCard || anniversaryCard);
+  const fullNumber = getCollectorNumber(card?.number);
+  const representativeCardId = catalogId
+    ?? (anniversaryCard && !fullNumber && card?.series ? anniversaryCard.id : null);
+  const priceQuery = useRepresentativePrice(representativeCardId, fullNumber, card?.name, card?.series, card?.rarity);
 
-  const hasData = prices?.marketPrice != null
-    && prices.marketPriceBasis === 'confirmed_ungraded_sales'
-    && prices.summary.transactionCount >= 3;
-
-  const navigateToTrend = () => {
+  const navigateToMarketOverview = () => {
     if (!card) return;
     router.push({
-      pathname: '/price-trend',
-      params: { 
-        id: priceId,
+      pathname: '/market-overview',
+      params: {
         cardName: card.name,
-        cardNumber: card.number,
+        cardNumber: fullNumber ?? '',
         series: card.series,
+        ...(anniversaryCard && !fullNumber ? { representativeCardId: anniversaryCard.id } : {}),
         rarity: card.rarity,
-        demo: 'false',
+        ...(catalogId ? { catalogCardId: catalogId } : {}),
+        ...(anniversaryCard ? { announcementImage: anniversaryCard.image } : {}),
       }
     });
   };
@@ -245,7 +247,7 @@ export default function CardDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.artworkWrap}>
+        <View style={[styles.artworkWrap, { backgroundColor: colors.cardElevated }]}>
           <CardThumbnail
             card={{
               name: card.name,
@@ -254,7 +256,7 @@ export default function CardDetailScreen() {
               rarity: card.rarity,
               cardId: catalogId,
             }}
-            imageUrl={catalogCard?.imageUrl}
+            imageUrl={anniversaryCard?.image ?? catalogCard?.imageUrl}
             scanImageUri={routeScanId && routeScanId === activeScanId
               && activeAnalysis?.catalogMatch?.matchedCardId === catalogId ? scanUri : null}
             scanId={routeScanId && routeScanId === activeScanId
@@ -265,12 +267,14 @@ export default function CardDetailScreen() {
         <View style={styles.identity}>
           <View style={styles.nameRow}>
             <Text style={[styles.cardName, { color: colors.foreground }]}>{card.name}</Text>
-            <View style={[styles.rarityPill, { backgroundColor: colors.accent }]}>
-              <Text style={[styles.rarity, { color: colors.primary }]}>{card.rarity}</Text>
-            </View>
+            {card.rarity ? (
+              <View style={[styles.rarityPill, { backgroundColor: colors.accent }]}>
+                <Text style={[styles.rarity, { color: colors.primary }]}>{card.rarity}</Text>
+              </View>
+            ) : null}
           </View>
           <Text style={[styles.cardNumber, { color: colors.mutedForeground }]}>
-            {card.number}
+            {card.number || '番号未確認'}
           </Text>
           {card.series ? <Text style={[styles.cardNumber, { color: colors.mutedForeground }]}>{card.series}</Text> : null}
         </View>
@@ -328,58 +332,21 @@ export default function CardDetailScreen() {
           </Pressable>
         ) : null}
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={error ? "価格を再取得" : "価格相場を見る"}
-          style={[styles.priceCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={error ? () => { void refetch(); } : navigateToTrend}
-        >
-          <View style={styles.priceHeader}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.priceLabel, { color: colors.mutedForeground }]}>
-                CARD EYE MARKET · 成約中央値
+          <View style={{ width: '100%', gap: 10 }}>
+            <RepresentativePrice
+              price={priceQuery.data?.representative}
+              isLoading={priceQuery.isLoading}
+              error={!!priceQuery.error}
+              onPress={navigateToMarketOverview}
+            />
+            <View style={styles.scanDateRow}>
+              <Feather name={isReferenceCard ? "info" : "clock"} size={15} color={colors.mutedForeground} />
+              <Text style={[styles.scanDateLabel, { color: colors.mutedForeground }]}>
+                {isReferenceCard ? "カード情報" : "保存日時"}
               </Text>
-              {error ? (
-                <Text style={[styles.price, { color: colors.destructive, fontSize: 20, marginVertical: 4 }]}>
-                  取得エラー · タップして再試行
-                </Text>
-              ) : isLoading ? (
-                <Text style={[styles.price, { color: colors.mutedForeground, fontSize: 20, marginVertical: 4 }]}>
-                  読み込み中...
-                </Text>
-              ) : hasData && prices?.marketPrice != null ? (
-                <Text style={[styles.price, { color: colors.foreground }]}>
-                  ¥{prices.marketPrice.toLocaleString()}
-                </Text>
-              ) : (
-                <Text style={[styles.price, { color: colors.mutedForeground, fontSize: 24, marginVertical: 4 }]}>
-                  データなし
-                </Text>
-              )}
-              {prices?.summary.shopMedian != null && (
-                <Text style={{ color: colors.mutedForeground, fontSize: 13, marginTop: 4 }}>
-                  店舗販売価格の参考値 ¥{prices.summary.shopMedian.toLocaleString()}（成約価格には含めません）
-                </Text>
-              )}
-              <Text style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 5 }}>
-                直近90日間の確認済み未鑑定品成約のみ。販売中の出品価格は含みません。
-              </Text>
-            </View>
-            <View style={[styles.trendBadge, { backgroundColor: colors.secondary }]}>
-              <Feather name="chevron-right" size={16} color={colors.foreground} />
+              <Text style={[styles.scanDate, { color: colors.foreground }]}>{card.scannedAt}</Text>
             </View>
           </View>
-          
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          
-          <View style={styles.scanDateRow}>
-            <Feather name={isCatalogCard ? "info" : "clock"} size={15} color={colors.mutedForeground} />
-            <Text style={[styles.scanDateLabel, { color: colors.mutedForeground }]}>
-              {isCatalogCard ? "カード情報" : "保存日時"}
-            </Text>
-            <Text style={[styles.scanDate, { color: colors.foreground }]}>{card.scannedAt}</Text>
-          </View>
-        </Pressable>
 
         {savedCard ? (
           <View style={styles.stateSection}>
@@ -594,11 +561,11 @@ export default function CardDetailScreen() {
           </View>
         ) : null}
 
-        {!isCatalogCard ? (
+        {!isReferenceCard ? (
           <View style={[styles.notice, { backgroundColor: colors.secondary }]}>
             <Feather name="info" size={17} color={colors.primary} />
             <Text style={[styles.noticeText, { color: colors.mutedForeground }]}>
-              写真は保存していません。価格は確認済み成約データがある場合のみ表示します。
+              写真は保存していません。参考価格には実際の観測情報やAI推定が含まれる場合があり、根拠・確信度・状態の確認状況を表示します。
             </Text>
           </View>
         ) : null}
@@ -680,6 +647,14 @@ export default function CardDetailScreen() {
   );
 }
 
+import PlayfulScreen from '@/variants/playful/screens/card/[id]';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function CardDetailRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   unavailable: { alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24 },
@@ -699,23 +674,34 @@ const styles = StyleSheet.create({
   },
   topBarTitle: { fontSize: 16, fontWeight: '700' },
   topBarSpacer: { width: 42, height: 42 },
-  content: { padding: 20, paddingBottom: 36, alignItems: 'center', gap: 20 },
-  artworkWrap: { width: 184, height: 256 },
-  identity: { width: '100%', gap: 7 },
+  content: { padding: 20, paddingBottom: 36, alignItems: 'center', gap: 22 },
+  artworkWrap: {
+    width: 204,
+    height: 284,
+    borderRadius: designTokens.radius.card,
+    overflow: 'hidden',
+    padding: 5,
+    shadowColor: designTokens.shadows.soft.shadowColor,
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 9 },
+    elevation: 3,
+  },
+  identity: { width: '100%', gap: 8 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  cardName: { flex: 1, fontSize: 24, fontWeight: '700', letterSpacing: -0.4 },
-  rarityPill: { borderRadius: 9, paddingHorizontal: 9, paddingVertical: 6 },
+  cardName: { flex: 1, fontSize: 25, fontWeight: '700', letterSpacing: -0.4 },
+  rarityPill: { borderRadius: designTokens.radius.pill, paddingHorizontal: 10, paddingVertical: 6 },
   rarity: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   cardNumber: { fontSize: 13 },
   managementActions: { width: '100%', flexDirection: 'row', gap: 10 },
-  sellAnalysisButton: { width: '100%', minHeight: 62, borderRadius: 16, paddingHorizontal: 17, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sellAnalysisButton: { width: '100%', minHeight: 62, borderRadius: designTokens.radius.medium, paddingHorizontal: 17, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sellAnalysisCopy: { gap: 3 },
   sellAnalysisEyebrow: { fontSize: 9, fontWeight: '800', letterSpacing: 1.1, opacity: 0.82 },
   sellAnalysisLabel: { fontSize: 15, fontWeight: '800' },
   manageButton: { flex: 1, minHeight: 45, borderWidth: 1, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   manageButtonText: { fontSize: 13, fontWeight: '700' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: 20 },
-  modalPanel: { borderWidth: 1, borderRadius: 20, padding: 20, gap: 15, maxHeight: '85%' },
+  modalPanel: { borderWidth: 1, borderRadius: designTokens.radius.hero, padding: 20, gap: 15, maxHeight: '85%' },
   modalTitle: { fontSize: 19, fontWeight: '700' },
   modalDescription: { fontSize: 13, lineHeight: 21 },
   formScroll: { flexGrow: 0 },
@@ -726,16 +712,16 @@ const styles = StyleSheet.create({
   formError: { fontSize: 12, lineHeight: 18 },
   modalActions: { flexDirection: 'row', gap: 10 },
   modalButton: { flex: 1, minHeight: 46, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  priceCard: { width: '100%', borderWidth: 1, borderRadius: 20, padding: 17, gap: 15 },
+  priceCard: { width: '100%', borderWidth: 1, borderRadius: designTokens.radius.card, padding: 18, gap: 15, shadowColor: designTokens.shadows.soft.shadowColor, shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 2 },
   priceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   priceLabel: { fontSize: 12, marginBottom: 5, fontWeight: '700' },
-  price: { fontSize: 30, fontWeight: '700', letterSpacing: -0.8 },
+  price: { fontSize: 28, fontWeight: '700', letterSpacing: -0.8 },
   trendBadge: { borderRadius: 16, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   divider: { height: StyleSheet.hairlineWidth, width: '100%' },
   scanDateRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   scanDateLabel: { flex: 1, fontSize: 12 },
   scanDate: { fontSize: 12, fontWeight: '600' },
-  stateSection: { width: '100%', gap: 11 },
+  stateSection: { width: '100%', gap: 13 },
   stateHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   stateTitle: { fontSize: 18, fontWeight: '700' },
   stateBadge: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: 9 },
@@ -743,12 +729,12 @@ const styles = StyleSheet.create({
   stateSummary: { borderWidth: 1, borderRadius: 15, padding: 14, gap: 5 },
   stateLabel: { fontSize: 11, fontWeight: '600' },
   stateValue: { fontSize: 15, fontWeight: '700', lineHeight: 21 },
-  rankCard: { width: '100%', borderWidth: 1, borderRadius: 17, padding: 15, gap: 7 },
+  rankCard: { width: '100%', borderWidth: 1, borderRadius: designTokens.radius.medium, padding: 17, gap: 8 },
   rankHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   rankTitle: { fontSize: 12, fontWeight: '700' },
   rankValue: { fontSize: 30, fontWeight: '800', letterSpacing: -0.5 },
   observationList: { gap: 8 },
-  observationRow: { borderWidth: 1, borderRadius: 14, padding: 13, gap: 6 },
+  observationRow: { borderWidth: 1, borderRadius: designTokens.radius.small, padding: 14, gap: 7 },
   observationValue: { fontSize: 13, lineHeight: 19 },
   conditionQualityNotice: { width: '100%', borderRadius: 15, borderWidth: 1, padding: 13, flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
   conditionQualityCopy: { flex: 1, gap: 6 },

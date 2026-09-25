@@ -6,10 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './aiMarketEstimates';
 export * from './aiMarketSearchRequest';
+export * from './aiMarketSearchRequestMimeType';
 export * from './aiMarketSearchResponse';
+export * from './aiMarketSearchResponseDetectedGrade';
 export * from './aiMarketSearchSource';
 export * from './aiMarketSearchSourceCategory';
+export * from './aiPriceEstimate';
 export * from './analyzeScanRequest';
 export * from './analyzeScanRequestMimeType';
 export * from './cardAnalysis';
@@ -37,12 +41,17 @@ export * from './conditionJudgementCount';
 export * from './conditionJudgementStatus';
 export * from './conditionQualityChecks';
 export * from './conditionScanInput';
+export * from './discoveryCard';
+export * from './discoveryCardSignal';
+export * from './discoveryCardsResponse';
 export * from './featuredCard';
-export * from './featuredCardMarketPriceBasis';
+export * from './featuredCardReferenceStatus';
+export * from './featuredCardSelectionReason';
 export * from './featuredCardsResponse';
 export * from './getCardPricesParams';
 export * from './getCardPricesPeriod';
 export * from './healthStatus';
+export * from './listDiscoverCardsParams';
 export * from './marketAnalysis';
 export * from './marketAnalysisCurrency';
 export * from './marketAnalysisCurrentPriceBasis';
@@ -69,4 +78,10 @@ export * from './priceSourceConfigType';
 export * from './priceSummary';
 export * from './priceTransactionSummary';
 export * from './priceTransactionSummaryPriceType';
+export * from './representativeMarketPrice';
+export * from './representativeMarketPriceCalculationMethod';
+export * from './representativeMarketPriceCondition';
+export * from './representativeMarketPriceConfidenceLabel';
+export * from './representativeMarketPriceEvidenceType';
+export * from './representativeMarketPriceWindowDays';
 export * from './supabaseStatus';

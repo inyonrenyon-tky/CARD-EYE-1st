@@ -17,7 +17,7 @@ import { useColors } from '@/hooks/useColors';
 import { useScan } from '@/hooks/ScanContext';
 import { holdPhoto, PhotoReadError } from '@/lib/readPhoto';
 
-export default function CameraScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { setPhotoUri } = useScan();
@@ -119,7 +119,7 @@ export default function CameraScreen() {
         onCameraReady={() => setIsCameraReady(true)}
       />
       <View style={styles.overlay} pointerEvents="box-none">
-        <View style={[styles.topBar, { paddingTop: insets.top + 10, backgroundColor: colors.background }]}>
+        <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="カメラを閉じる"
@@ -127,7 +127,7 @@ export default function CameraScreen() {
             onPress={() => router.back()}
             style={({ pressed }) => [
               styles.iconButton,
-              { backgroundColor: colors.background, opacity: pressed ? 0.7 : 0.9 },
+               { backgroundColor: colors.overlay, opacity: pressed ? 0.7 : 0.92 },
             ]}
           >
             <Feather name="x" size={22} color={colors.foreground} />
@@ -141,7 +141,7 @@ export default function CameraScreen() {
             style={({ pressed }) => [
               styles.iconButton,
               {
-                backgroundColor: flash === 'on' ? colors.primary : colors.background,
+                 backgroundColor: flash === 'on' ? colors.primary : colors.overlay,
                 opacity: pressed ? 0.7 : 0.9,
               },
             ]}
@@ -161,12 +161,15 @@ export default function CameraScreen() {
             <View style={[styles.corner, styles.cornerBottomLeft, { borderColor: colors.primaryForeground }]} />
             <View style={[styles.corner, styles.cornerBottomRight, { borderColor: colors.primaryForeground }]} />
           </View>
-          <Text style={[styles.guideText, { color: colors.primaryForeground }]}>
-            カード全体が枠内に入るように撮影してください
-          </Text>
+           <View style={[styles.guidePill, { backgroundColor: colors.overlay }]}>
+             <Feather name="eye" size={14} color={colors.primaryForeground} />
+             <Text style={[styles.guideText, { color: colors.primaryForeground }]}>
+               カード全体が枠内に入るように撮影してください
+             </Text>
+           </View>
         </View>
 
-        <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 20, backgroundColor: colors.background }]}>
+         <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 20, backgroundColor: colors.overlay }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="写真ライブラリから選択"
@@ -198,6 +201,14 @@ export default function CameraScreen() {
       </View>
     </View>
   );
+}
+
+import PlayfulScreen from '@/variants/playful/screens/camera';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function CameraRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
 }
 
 type PermissionStateProps = {
@@ -276,22 +287,23 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 44,
     height: 44,
-    borderRadius: 15,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  guideArea: { alignItems: 'center', gap: 18, marginTop: -48 },
-  guideFrame: { width: 286, height: 382, position: 'relative' },
-  corner: { width: 34, height: 34, position: 'absolute', borderWidth: 3 },
+  guideArea: { alignItems: 'center', gap: 18, marginTop: -36 },
+  guideFrame: { width: '78%', maxWidth: 292, aspectRatio: 0.74, position: 'relative' },
+  corner: { width: 38, height: 38, position: 'absolute', borderWidth: 3 },
   cornerTopLeft: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 8 },
   cornerTopRight: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 8 },
   cornerBottomLeft: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 8 },
   cornerBottomRight: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 8 },
-  guideText: { fontSize: 13, fontWeight: '600', textAlign: 'center', paddingHorizontal: 24 },
+  guidePill: { minHeight: 34, borderRadius: 17, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 7, marginHorizontal: 20 },
+  guideText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   bottomPanel: {
-    minHeight: 144,
+    minHeight: 154,
     paddingHorizontal: 32,
-    paddingTop: 20,
+    paddingTop: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -299,14 +311,14 @@ const styles = StyleSheet.create({
   galleryButton: { width: 76, alignItems: 'center', gap: 7 },
   galleryLabel: { fontSize: 10, fontWeight: '600' },
   captureButton: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    borderWidth: 4,
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  captureInner: { width: 60, height: 60, borderRadius: 30 },
+  captureInner: { width: 66, height: 66, borderRadius: 33 },
   bottomPlaceholder: { width: 76 },
   permissionScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 15 },
   permissionBack: { position: 'absolute', top: 62, left: 20, width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },

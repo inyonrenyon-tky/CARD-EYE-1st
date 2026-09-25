@@ -27,7 +27,7 @@ type CardFields = {
 
 const emptyCard: CardFields = { cardName: '', series: '', cardNumber: '', rarity: '' };
 
-export default function AnalysisResultScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { analysis: savedAnalysis, uri, scanId, setScan, clearScan } = useScan();
@@ -129,14 +129,18 @@ export default function AnalysisResultScreen() {
 
   if (analyze.isPending) {
     return <View style={[styles.screen, styles.center, { backgroundColor: colors.background }]}>
-      <Feather name="loader" size={30} color={colors.primary} />
+      <View style={[styles.loadingMark, { backgroundColor: colors.secondary }]}>
+        <Feather name="eye" size={24} color={colors.primary} />
+      </View>
       <Text style={[styles.heading, { color: colors.foreground }]}>カードを解析しています</Text>
       <Text style={[styles.description, { color: colors.mutedForeground }]}>写真を安全に送信して識別しています。</Text>
     </View>;
   }
   if (loadError || !analysis) {
     return <View style={[styles.screen, styles.center, { backgroundColor: colors.background }]}>
-      <Feather name="wifi-off" size={30} color={colors.warning} />
+      <View style={[styles.loadingMark, { backgroundColor: colors.warningSoft }]}>
+        <Feather name="search" size={24} color={colors.warning} />
+      </View>
       <Text style={[styles.heading, { color: colors.foreground }]}>解析できませんでした</Text>
       <Text style={[styles.description, { color: colors.mutedForeground }]}>{loadError ?? '解析結果がありません。'}</Text>
       <Pressable testID="analysis-retry-button" onPress={runAnalysis} style={[styles.primaryButton, { backgroundColor: colors.primary, width: '80%' }]}>
@@ -157,7 +161,7 @@ export default function AnalysisResultScreen() {
             onPress={() => setIsEditing(false)}
             style={({ pressed }) => [
               styles.iconButton,
-              { backgroundColor: colors.secondary, opacity: pressed ? 0.7 : 1 },
+             { backgroundColor: colors.cardElevated, opacity: pressed ? 0.7 : 1 },
             ]}
           >
             <Feather name="arrow-left" size={20} color={colors.foreground} />
@@ -252,7 +256,7 @@ export default function AnalysisResultScreen() {
           onPress={() => router.back()}
           style={({ pressed }) => [
             styles.iconButton,
-            { backgroundColor: colors.secondary, opacity: pressed ? 0.7 : 1 },
+             { backgroundColor: colors.cardElevated, opacity: pressed ? 0.7 : 1 },
           ]}
         >
           <Feather name="arrow-left" size={20} color={colors.foreground} />
@@ -268,7 +272,7 @@ export default function AnalysisResultScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.resultBadge, { backgroundColor: colors.positiveSoft }]}>
+         <View style={[styles.resultBadge, { backgroundColor: colors.positiveSoft }]}>
           <Feather name="check-circle" size={16} color={colors.positive} />
            <Text style={[styles.resultBadgeText, { color: analysis.catalogMatch?.matchedCardId ? colors.positive : colors.warning }]}>
              {analysis.catalogMatch?.matchedCardId ? 'カードマスター照合済み' : analysis.identified ? 'AIによる候補' : '識別できませんでした'}
@@ -283,7 +287,7 @@ export default function AnalysisResultScreen() {
                : 'カード情報が空欄のため、分かる範囲で入力して続けられます。'}
         </Text>
 
-        <View style={styles.resultRow}>
+         <View style={[styles.resultRow, { backgroundColor: colors.cardElevated }]}>
           <View style={[styles.imageWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <CardThumbnail
               card={{
@@ -308,7 +312,7 @@ export default function AnalysisResultScreen() {
           </View>
         </View>
 
-        <View style={[styles.confidenceCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+         <View style={[styles.confidenceCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.confidenceHeader}>
             <Text style={[styles.confidenceLabel, { color: colors.mutedForeground }]}>AI解析表示</Text>
             <Text style={[styles.confidenceValue, { color: colors.foreground }]}>
@@ -370,7 +374,7 @@ export default function AnalysisResultScreen() {
             }
             style={({ pressed }) => [
               styles.secondaryButton,
-              { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
+               { backgroundColor: colors.cardElevated, borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
             ]}
           >
             <Feather name="check-circle" size={18} color={colors.foreground} />
@@ -383,7 +387,7 @@ export default function AnalysisResultScreen() {
             onPress={startEditing}
             style={({ pressed }) => [
               styles.secondaryButton,
-              { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
+               { backgroundColor: colors.cardElevated, borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
             ]}
           >
             <Feather name="edit-3" size={18} color={colors.foreground} />
@@ -405,6 +409,14 @@ export default function AnalysisResultScreen() {
       </KeyboardAwareScrollViewCompat>
     </View>
   );
+}
+
+import PlayfulScreen from '@/variants/playful/screens/analysis-result';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function AnalysisResultRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
 }
 
 type CardFieldProps = {
@@ -440,43 +452,44 @@ function CardField({ label, value, placeholder, onChangeText, colors, testID }: 
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  center: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 14 },
+  center: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 16 },
+  loadingMark: { width: 64, height: 64, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   topBar: { minHeight: 72, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  iconButton: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  iconButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 16, fontWeight: '700' },
   topSpacer: { width: 42, height: 42 },
   resultContent: { paddingHorizontal: 20, alignItems: 'center', gap: 16 },
   formContent: { paddingHorizontal: 20, gap: 17 },
   resultBadge: { borderRadius: 20, paddingHorizontal: 11, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 },
   resultBadgeText: { fontSize: 12, fontWeight: '700' },
-  heading: { fontSize: 25, fontWeight: '700', textAlign: 'center', letterSpacing: -0.4 },
-  description: { fontSize: 13, lineHeight: 20, textAlign: 'center' },
-  resultRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 15, marginTop: 4 },
-  imageWrap: { width: 118, height: 164, borderWidth: 1, borderRadius: 16, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  heading: { fontSize: 24, lineHeight: 30, fontWeight: '700', textAlign: 'center', letterSpacing: -0.4 },
+  description: { fontSize: 14, lineHeight: 21, textAlign: 'center' },
+  resultRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 15, marginTop: 4, padding: 12, borderRadius: 22 },
+  imageWrap: { width: 122, height: 170, borderWidth: 1, borderRadius: 18, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   image: { width: '100%', height: '100%' },
-  cardInfo: { flex: 1, gap: 6 },
-  cardName: { fontSize: 19, fontWeight: '700' },
+  cardInfo: { flex: 1, gap: 7 },
+  cardName: { fontSize: 19, lineHeight: 24, fontWeight: '700' },
   setName: { fontSize: 12, lineHeight: 17 },
   number: { fontSize: 12 },
   rarityPill: { alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, marginTop: 2 },
   rarity: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  confidenceCard: { width: '100%', borderWidth: 1, borderRadius: 18, padding: 15, gap: 11, marginTop: 1 },
+  confidenceCard: { width: '100%', borderWidth: 1, borderRadius: 22, padding: 16, gap: 11, marginTop: 1 },
   confidenceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   confidenceLabel: { fontSize: 12 },
   confidenceValue: { fontSize: 18, fontWeight: '700' },
   aiDisclaimer: { fontSize: 11, lineHeight: 17 },
   actionGroup: { width: '100%', gap: 10, marginTop: 2 },
-  secondaryButton: { minHeight: 54, borderRadius: 17, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  secondaryButton: { minHeight: 56, borderRadius: 20, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   secondaryButtonText: { fontSize: 15, fontWeight: '700' },
-  primaryButton: { minHeight: 54, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  primaryButton: { minHeight: 56, borderRadius: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   primaryButtonText: { fontSize: 15, fontWeight: '700' },
   retakeButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   retakeText: { fontSize: 13, fontWeight: '600' },
-  editNotice: { borderRadius: 15, padding: 13, flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
+  editNotice: { borderRadius: 20, padding: 15, flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
   editNoticeText: { flex: 1, fontSize: 12, lineHeight: 18 },
   field: { gap: 8 },
   fieldLabel: { fontSize: 13, fontWeight: '700' },
-  input: { minHeight: 52, borderWidth: 1, borderRadius: 15, paddingHorizontal: 15, fontSize: 15 },
+  input: { minHeight: 54, borderWidth: 1, borderRadius: 18, paddingHorizontal: 15, fontSize: 15 },
   cancelButton: { minHeight: 40, alignItems: 'center', justifyContent: 'center' },
   cancelText: { fontSize: 13, fontWeight: '600' },
 });

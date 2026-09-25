@@ -119,6 +119,16 @@ paths:
           in: query
           required: false
           schema: { type: string, maxLength: 100 }
+        - name: series
+          in: query
+          required: false
+          description: Exact provider-visible set code required for representative pricing.
+          schema: { type: string, minLength: 1, maxLength: 40, pattern: "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$" }
+        - name: rarity
+          in: query
+          required: false
+          description: Printed rarity or variant, used to identify cards without a confirmed printed number.
+          schema: { type: string, minLength: 1, maxLength: 80 }
       responses:
         "200":
           description: Site-by-site prices and transaction aggregation
@@ -134,7 +144,7 @@ paths:
     get:
       operationId: getFeaturedCards
       tags: [catalog]
-      summary: Get curated featured cards with confirmed recent sale prices when available
+      summary: Discover approved-image cards ranked by confirmed recent transactions and scans
       responses:
         "200":
           description: Curated cards with rights-approved primary images
@@ -142,6 +152,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeaturedCardsResponse"
+        "503":
+          description: Catalog database unavailable
+  /cards/discover:
+    get:
+      operationId: listDiscoverCards
+      tags: [catalog]
+      summary: Browse actual Japanese catalog cards using recent releases and scan activity
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 30, default: 24 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+        - name: query
+          in: query
+          schema: { type: string, maxLength: 60 }
+      responses:
+        "200":
+          description: Paginated catalog identities; images are nullable until approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryCardsResponse"
+        "400":
+          description: Invalid pagination or search query
         "503":
           description: Catalog database unavailable
   /cards/catalog/{cardId}:
@@ -165,6 +201,34 @@ paths:
           description: Invalid catalog UUID
         "404":
           description: Catalog card not found
+        "503":
+          description: Catalog database unavailable
+  /cards/catalog/{cardId}/ai-market-result:
+    get:
+      operationId: getCatalogCardAiMarketResult
+      tags: [catalog]
+      summary: Get shared AI market research for a canonical catalog card
+      description: Returns current cited market research for the catalog identity. AI estimates are references only and are not stored as confirmed price observations.
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Current Japanese market research with cited source signals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiMarketSearchResponse"
+        "400":
+          description: Invalid catalog UUID
+        "404":
+          description: Catalog card not found
+        "429":
+          description: Search rate limit exceeded on a true cache miss
+        "502":
+          description: AI web research service unavailable or returned invalid data
         "503":
           description: Catalog database unavailable
   /cards/market-analysis:
@@ -245,12 +309,12 @@ components:
         series: { type: string }
         rarity: { type: string }
         imageUrl: { type: string, format: uri }
-        marketPrice: { type: [number, "null"], minimum: 0 }
-        marketPriceBasis:
-          type: [string, "null"]
-          enum: [confirmed_ungraded_sales, null]
-        transactionCount: { type: integer, minimum: 0 }
-      required: [id, name, number, series, rarity, imageUrl, marketPrice, marketPriceBasis, transactionCount]
+        referenceMin: { type: [number, "null"], exclusiveMinimum: 0, description: Lower bound of the complete ungraded beautiful-to-mint AI reference range. }
+        referenceMax: { type: [number, "null"], exclusiveMinimum: 0, description: Upper bound of the complete ungraded beautiful-to-mint AI reference range. }
+        referenceStatus: { type: string, enum: [researching, available, unavailable] }
+        referenceCheckedAt: { type: [string, "null"], format: date-time }
+        selectionReason: { type: string, enum: [scanned, discovery] }
+      required: [id, name, number, series, rarity, imageUrl, referenceMin, referenceMax, referenceStatus, referenceCheckedAt, selectionReason]
     FeaturedCardsResponse:
       type: object
       additionalProperties: false
@@ -260,6 +324,29 @@ components:
           maxItems: 12
           items: { $ref: "#/components/schemas/FeaturedCard" }
       required: [cards]
+    DiscoveryCard:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        number: { type: string }
+        series: { type: string }
+        rarity: { type: string }
+        imageUrl: { type: [string, "null"], format: uri }
+        releaseDate: { type: [string, "null"], format: date }
+        signal: { type: string, enum: [recently_scanned, new_release, catalog] }
+      required: [id, name, number, series, rarity, imageUrl, releaseDate, signal]
+    DiscoveryCardsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        cards:
+          type: array
+          maxItems: 30
+          items: { $ref: "#/components/schemas/DiscoveryCard" }
+        total: { type: integer, minimum: 0 }
+      required: [cards, total]
     SupabaseStatus:
       type: object
       properties:
@@ -504,8 +591,28 @@ components:
         condition: { type: [string, "null"] }
         graded: { type: boolean, enum: [false] }
         grade: { type: "null" }
-        saleStatus: { type: string, enum: [sold, listing, buyback] }
+        saleStatus: { type: string, enum: [sold, auction_closed, listing, buyback] }
       required: [source, sourceType, observedAt, price, condition, graded, grade, saleStatus]
+    RepresentativeMarketPrice:
+      type: object
+      additionalProperties: false
+      description: Observed representative price when available; otherwise a separately labeled AI-estimated reference value, never a confirmed sale.
+      properties:
+        price: { type: [number, "null"], exclusiveMinimum: 0 }
+        condition: { type: string, enum: [beautiful_ungraded, condition_unverified, ai_estimated] }
+        calculationMethod: { type: [string, "null"], enum: [recent_sales_median, extended_sales_median, sales_plus_shop, shop_median, limited_market_estimate, observed_market_median, ai_estimate, null] }
+        confidenceScore: { type: [number, "null"], minimum: 0, maximum: 1 }
+        confidenceLabel: { type: string, enum: [high, medium, low, insufficient] }
+        sampleCount: { type: integer, minimum: 0 }
+        windowDays: { type: [integer, "null"], enum: [14, 30, 60, 90, null] }
+        calculatedAt: { type: string, format: date-time }
+        lastObservedAt: { type: [string, "null"], format: date-time }
+        sourceNames: { type: array, items: { type: string } }
+        evidenceType: { type: [string, "null"], enum: [verified_sale, auction_closed, shop_listing, ai_research, null] }
+        rangeMin: { type: [number, "null"], exclusiveMinimum: 0 }
+        rangeMax: { type: [number, "null"], exclusiveMinimum: 0 }
+        note: { type: string }
+      required: [price, condition, calculationMethod, confidenceScore, confidenceLabel, sampleCount, windowDays, calculatedAt, lastObservedAt, sourceNames, evidenceType, rangeMin, rangeMax, note]
     CardPrices:
       type: object
       additionalProperties: false
@@ -517,6 +624,7 @@ components:
         marketPrice: { type: [number, "null"] }
         marketPriceConfidence: { type: string, enum: [high, medium, low, insufficient] }
         marketPriceBasis: { type: [string, "null"], enum: [confirmed_ungraded_sales, shop_listing_reference, null] }
+        representative: { $ref: "#/components/schemas/RepresentativeMarketPrice" }
         observations:
           type: array
           items: { $ref: "#/components/schemas/PriceObservation" }
@@ -540,7 +648,7 @@ components:
           type: array
           items: { $ref: "#/components/schemas/PriceSourceAvailability" }
         methodology: { type: string }
-      required: [cardId, currency, mode, periodDays, marketPrice, marketPriceConfidence, marketPriceBasis, observations, reference, summary, sources, sourceConfigs, methodology]
+      required: [cardId, currency, mode, periodDays, marketPrice, marketPriceConfidence, marketPriceBasis, representative, observations, reference, summary, sources, sourceConfigs, methodology]
     PriceReference:
       type: object
       additionalProperties: false
@@ -567,6 +675,8 @@ components:
         cardNumber: { type: [string, "null"], maxLength: 40 }
         series: { type: [string, "null"], maxLength: 100 }
         rarity: { type: [string, "null"], maxLength: 40 }
+        imageBase64: { type: string, maxLength: 7000000 }
+        mimeType: { type: string, enum: [image/jpeg, image/png, image/webp] }
       required: [cardName]
     AiMarketSearchSource:
       type: object
@@ -574,7 +684,7 @@ components:
       properties:
         title: { type: string }
         url: { type: string, format: uri }
-        category: { type: string, enum: [sale, shop, buyback, psa10] }
+        category: { type: string, enum: [sale, shop, buyback, psa10, psa9, psa10_listing, ungraded_listing, reference] }
         price: { type: [number, "null"], exclusiveMinimum: 0 }
       required: [title, url, category, price]
     AiMarketSearchResponse:
@@ -586,19 +696,55 @@ components:
         series: { type: [string, "null"] }
         rarity: { type: [string, "null"] }
         searchedAt: { type: string, format: date-time }
-        marketPrice: { type: [number, "null"], exclusiveMinimum: 0 }
+        identityNote: { type: string }
+        detectedGrade: { type: string, enum: [PSA9, PSA10, ungraded, unknown] }
+        marketPrice:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: AI-estimated reference only; not a confirmed transaction price.
+        referenceMin:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: Lower bound from ungradedExcellent (A− to A); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.
+        referenceMax:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: Upper bound from ungradedMint (A to S); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.
+        estimates: { $ref: "#/components/schemas/AiMarketEstimates" }
         saleMedian: { type: [number, "null"], exclusiveMinimum: 0 }
         saleCount: { type: [integer, "null"], minimum: 1 }
         shopMin: { type: [number, "null"], exclusiveMinimum: 0 }
         shopMax: { type: [number, "null"], exclusiveMinimum: 0 }
-        buybackMin: { type: [number, "null"], exclusiveMinimum: 0 }
-        buybackMax: { type: [number, "null"], exclusiveMinimum: 0 }
+        buybackMin: { type: [number, "null"], exclusiveMinimum: 0, description: Cited current shop buyback offers explicitly for ungraded A− to S cards only; unavailable if incompatible with shop sale or reference range. }
+        buybackMax: { type: [number, "null"], exclusiveMinimum: 0, description: Upper bound of qualifying buybacks; never higher than a displayed shop selling minimum. }
         psa10Median: { type: [number, "null"], exclusiveMinimum: 0 }
         explanation: { type: string }
         sources:
           type: array
           items: { $ref: "#/components/schemas/AiMarketSearchSource" }
-      required: [cardName, cardNumber, series, rarity, searchedAt, marketPrice, saleMedian, saleCount, shopMin, shopMax, buybackMin, buybackMax, psa10Median, explanation, sources]
+      required: [cardName, cardNumber, series, rarity, searchedAt, identityNote, detectedGrade, marketPrice, referenceMin, referenceMax, estimates, saleMedian, saleCount, shopMin, shopMax, buybackMin, buybackMax, psa10Median, explanation, sources]
+    AiPriceEstimate:
+      type: object
+      additionalProperties: false
+      description: AI-estimated indicative range, not a confirmed price.
+      properties:
+        min: { type: [number, "null"], exclusiveMinimum: 0 }
+        max: { type: [number, "null"], exclusiveMinimum: 0 }
+        note: { type: string }
+      required: [min, max, note]
+    AiMarketEstimates:
+      type: object
+      additionalProperties: false
+      description: Separate indicative estimates by condition/grade; these are AI estimates, not confirmed prices.
+      properties:
+        # C〜B: damaged/played; A−〜A: excellent; A〜S: mint.
+        ungradedPlayed: { $ref: "#/components/schemas/AiPriceEstimate" }
+        ungradedExcellent: { $ref: "#/components/schemas/AiPriceEstimate" }
+        ungradedMint: { $ref: "#/components/schemas/AiPriceEstimate" }
+        psa9: { $ref: "#/components/schemas/AiPriceEstimate" }
+        psa10: { $ref: "#/components/schemas/AiPriceEstimate" }
+        psa10Listing: { $ref: "#/components/schemas/AiPriceEstimate" }
+      required: [ungradedPlayed, ungradedExcellent, ungradedMint, psa9, psa10, psa10Listing]
     MarketEvent:
       type: object
       additionalProperties: false

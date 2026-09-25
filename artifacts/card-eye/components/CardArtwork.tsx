@@ -2,13 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import type { CardRecord } from '@/constants/mock-data';
-
-const toneColors: Record<CardRecord['tone'], string> = {
-  blue: '#2563eb',
-  violet: '#7c3aed',
-  orange: '#ea580c',
-  green: '#059669',
-};
+import { designTokens } from '@/constants/design-tokens';
 
 type CardArtworkProps = {
   card: Pick<CardRecord, 'name' | 'number' | 'tone'>;
@@ -17,6 +11,12 @@ type CardArtworkProps = {
 
 export function CardArtwork({ card, compact = false }: CardArtworkProps) {
   const colors = useColors();
+  const toneColors: Record<CardRecord['tone'], string> = {
+    blue: colors.sky,
+    violet: colors.lavender,
+    orange: colors.coral,
+    green: colors.mint,
+  };
   const accent = toneColors[card.tone];
 
   return (
@@ -27,22 +27,22 @@ export function CardArtwork({ card, compact = false }: CardArtworkProps) {
     >
       <View style={styles.inner}>
         <View style={styles.topLine}>
-          <Text style={styles.miniLabel}>POKÉMON</Text>
+          <Text style={[styles.miniLabel, { color: colors.primaryForeground }]}>CARD EYE</Text>
           <View style={styles.starRow}>
-            <Feather name="star" size={compact ? 8 : 10} color="#fff" />
-            <Feather name="star" size={compact ? 8 : 10} color="#fff" />
+            <Feather name="star" size={compact ? 8 : 10} color={colors.primaryForeground} />
+            <Feather name="star" size={compact ? 8 : 10} color={colors.primaryForeground} />
           </View>
         </View>
         <Image
-          source={require('@/assets/images/icon.png')}
+          source={require('@/assets/images/classic-icon.png')}
           resizeMode="contain"
           style={[styles.logo, compact && styles.compactLogo]}
         />
         <View style={styles.bottomLine}>
-          <Text numberOfLines={1} style={[styles.cardName, compact && styles.compactName]}>
+          <Text numberOfLines={1} style={[styles.cardName, compact && styles.compactName, { color: colors.primaryForeground }]}>
             {card.name}
           </Text>
-          <Text style={[styles.cardNumber, compact && styles.compactNumber]}>
+          <Text style={[styles.cardNumber, compact && styles.compactNumber, { color: colors.primaryForeground }]}>
             {card.number}
           </Text>
         </View>
@@ -55,19 +55,19 @@ export function CardArtwork({ card, compact = false }: CardArtworkProps) {
 const styles = StyleSheet.create({
   frame: {
     aspectRatio: 0.72,
-    borderRadius: 14,
+    borderRadius: designTokens.radius.medium,
     overflow: 'hidden',
     padding: 4,
   },
   compactFrame: {
-    borderRadius: 10,
+    borderRadius: designTokens.radius.small,
     padding: 3,
   },
   inner: {
     flex: 1,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
-    borderRadius: 11,
+    borderColor: 'rgba(24,46,61,0.18)',
+    borderRadius: designTokens.radius.small,
     padding: 8,
     justifyContent: 'space-between',
   },
@@ -77,7 +77,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   miniLabel: {
-    color: 'rgba(255,255,255,0.78)',
     fontSize: 7,
     fontWeight: '700',
     letterSpacing: 1,
@@ -100,7 +99,6 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   cardName: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -108,7 +106,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
   },
   cardNumber: {
-    color: 'rgba(255,255,255,0.74)',
     fontSize: 8,
     fontWeight: '500',
   },

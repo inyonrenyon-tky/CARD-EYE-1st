@@ -51,7 +51,7 @@ function confidenceLabel(value: MarketAnalysis['dataConfidence']) {
   }
 }
 
-export default function SellTimingAnalysisScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { savedCardId } = useLocalSearchParams<{ savedCardId?: string }>();
@@ -142,7 +142,7 @@ export default function SellTimingAnalysisScreen() {
           </View>
         ) : (
           <>
-            <View style={[styles.identityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.identityCard, { backgroundColor: colors.cardElevated, borderColor: colors.border }]}>
               <View style={styles.identityImage}>
                 <CardThumbnail
                   compact
@@ -206,11 +206,11 @@ export default function SellTimingAnalysisScreen() {
               </View>
             ) : (
               <>
-                <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <View style={styles.heroTopline}>
                     <View style={[styles.liveDot, { backgroundColor: analysis.currentPrice == null ? colors.mutedForeground : colors.positive }]} />
                     <Text style={[styles.heroLabel, { color: colors.mutedForeground }]}>現在の参考価格</Text>
-                    <View style={[styles.basisPill, { backgroundColor: colors.secondary }]}>
+                    <View style={[styles.basisPill, { backgroundColor: colors.accent }]}>
                       <Text style={[styles.basisText, { color: colors.secondaryForeground }]}>
                         {analysis.currentPriceBasis === 'SALE' ? 'SALE · 成約価格' : analysis.currentPriceBasis === 'LISTING' ? 'LISTING · 販売価格' : '価格基準なし'}
                       </Text>
@@ -305,7 +305,7 @@ export default function SellTimingAnalysisScreen() {
                     ))}
                   </View>
                   {analysis.confidenceReasons.length > 0 ? (
-                    <View style={[styles.subtlePanel, { backgroundColor: colors.secondary }]}>
+                      <View style={[styles.subtlePanel, { backgroundColor: colors.overlay }]}>
                       <Text style={[styles.panelLabel, { color: colors.mutedForeground }]}>データの確信度について</Text>
                       {analysis.confidenceReasons.map((reason, index) => (
                         <Text key={`${index}-${reason}`} style={[styles.bodyText, { color: colors.foreground }]}>・{reason}</Text>
@@ -386,6 +386,14 @@ export default function SellTimingAnalysisScreen() {
   );
 }
 
+import PlayfulScreen from '@/variants/playful/screens/sell-timing-analysis';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function SellTimingAnalysisRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   topBar: { minHeight: 82, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10 },
@@ -393,19 +401,19 @@ const styles = StyleSheet.create({
   headerTitleWrap: { flex: 1, alignItems: 'center', gap: 3 },
   eyebrow: { fontSize: 9, fontWeight: '800', letterSpacing: 1.4 },
   topTitle: { fontSize: 19, fontWeight: '800' },
-  content: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 8, gap: 22 },
-  identityCard: { width: '100%', borderWidth: 1, borderRadius: 18, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 13 },
+  content: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 10, gap: 24 },
+  identityCard: { width: '100%', borderWidth: 1, borderRadius: 24, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 15 },
   identityImage: { width: 54, height: 74, borderRadius: 9, overflow: 'hidden' },
   identityCopy: { flex: 1, gap: 4 },
   cardName: { fontSize: 16, fontWeight: '700' },
   cardNumber: { fontSize: 12 },
-  heroCard: { width: '100%', borderWidth: 1, borderRadius: 22, padding: 20, overflow: 'hidden' },
+  heroCard: { width: '100%', borderWidth: 1, borderRadius: 28, padding: 22, overflow: 'hidden' },
   heroTopline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   liveDot: { width: 7, height: 7, borderRadius: 4 },
   heroLabel: { flex: 1, fontSize: 13, fontWeight: '600' },
   basisPill: { borderRadius: 30, paddingHorizontal: 10, paddingVertical: 6 },
   basisText: { fontSize: 10, fontWeight: '700' },
-  heroPrice: { fontSize: 42, lineHeight: 53, fontWeight: '800', letterSpacing: -1.2, marginTop: 7 },
+  heroPrice: { fontSize: 38, lineHeight: 49, fontWeight: '800', letterSpacing: -1, marginTop: 9 },
   heroDivider: { height: StyleSheet.hairlineWidth, marginVertical: 15 },
   heroMetricRow: { flexDirection: 'row', alignItems: 'center' },
   heroMetric: { flex: 1, gap: 5 },
@@ -413,7 +421,7 @@ const styles = StyleSheet.create({
   heroMetricLabel: { fontSize: 11, fontWeight: '600' },
   heroMetricValue: { fontSize: 18, fontWeight: '800' },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  metric: { flexGrow: 1, flexBasis: '30%', minWidth: '30%', borderWidth: 1, borderRadius: 15, padding: 13, gap: 7 },
+  metric: { flexGrow: 1, flexBasis: '30%', minWidth: '30%', borderWidth: 1, borderRadius: 19, padding: 14, gap: 7 },
   metricLabel: { fontSize: 10, fontWeight: '600' },
   metricValue: { fontSize: 14, fontWeight: '700' },
   section: { width: '100%', gap: 11 },
@@ -421,7 +429,7 @@ const styles = StyleSheet.create({
   sectionEyebrow: { fontSize: 9, fontWeight: '800', letterSpacing: 1.4, marginBottom: 3 },
   sectionTitle: { fontSize: 18, fontWeight: '800' },
   sectionCaption: { fontSize: 11, marginBottom: 2 },
-  chartCard: { width: '100%', borderWidth: 1, borderRadius: 18, padding: 14, gap: 14 },
+  chartCard: { width: '100%', borderWidth: 1, borderRadius: 24, padding: 16, gap: 14 },
   periodToggle: { width: '100%', flexDirection: 'row', borderRadius: 12, padding: 4 },
   periodButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, borderRadius: 9 },
   periodText: { fontSize: 12, fontWeight: '700' },
@@ -434,7 +442,7 @@ const styles = StyleSheet.create({
   indicatorValue: { flex: 1, fontSize: 12, lineHeight: 18, textAlign: 'right' },
   subtlePanel: { borderRadius: 14, padding: 13, gap: 6 },
   panelLabel: { fontSize: 10, fontWeight: '700', marginBottom: 3 },
-  infoPanel: { borderWidth: 1, borderRadius: 17, padding: 15, gap: 12 },
+  infoPanel: { borderWidth: 1, borderRadius: 22, padding: 16, gap: 12 },
   bodyText: { fontSize: 12, lineHeight: 19 },
   infoDivider: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, gap: 8 },
   eventRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
@@ -442,7 +450,7 @@ const styles = StyleSheet.create({
   eventTitle: { fontSize: 12, fontWeight: '700', lineHeight: 17 },
   eventMeta: { fontSize: 10, lineHeight: 16 },
   availabilityList: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, gap: 5 },
-  summaryCard: { borderWidth: 1, borderRadius: 17, padding: 16, gap: 10 },
+  summaryCard: { borderWidth: 1, borderRadius: 22, padding: 17, gap: 10 },
   summaryText: { fontSize: 14, lineHeight: 22, fontWeight: '600' },
   methodology: { fontSize: 10, lineHeight: 16 },
   stateCard: { width: '100%', borderWidth: 1, borderRadius: 17, padding: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 11 },

@@ -14,4 +14,8 @@ export const AiMarketSearchSourceCategory = {
   shop: 'shop',
   buyback: 'buyback',
   psa10: 'psa10',
+  psa9: 'psa9',
+  psa10_listing: 'psa10_listing',
+  ungraded_listing: 'ungraded_listing',
+  reference: 'reference',
 } as const;

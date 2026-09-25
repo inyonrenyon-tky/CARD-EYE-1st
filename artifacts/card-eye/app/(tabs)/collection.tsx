@@ -5,8 +5,9 @@ import { CardThumbnail } from '@/components/CardThumbnail';
 import { Screen } from '@/components/Screen';
 import { useColors } from '@/hooks/useColors';
 import { useSavedCards } from '@/hooks/SavedCardsContext';
+import { designTokens } from '@/constants/design-tokens';
 
-export default function CollectionScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const { cards, isLoaded, loadError } = useSavedCards();
 
@@ -14,7 +15,7 @@ export default function CollectionScreen() {
     <Screen>
       <View style={styles.header}>
         <View>
-          <Text style={[styles.eyebrow, { color: colors.primary }]}>MY CARDS</Text>
+          <Text style={[styles.eyebrow, { color: colors.primary }]}>YOUR CARD BOOK</Text>
           <Text style={[styles.title, { color: colors.foreground }]}>コレクション</Text>
         </View>
         <Pressable
@@ -24,7 +25,7 @@ export default function CollectionScreen() {
           onPress={() => router.push('/scan')}
           style={({ pressed }) => [
             styles.addButton,
-            { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+             { backgroundColor: colors.primary, opacity: pressed ? 0.78 : 1 },
           ]}
         >
           <Feather name="plus" size={22} color={colors.primaryForeground} />
@@ -32,12 +33,13 @@ export default function CollectionScreen() {
       </View>
 
       <View style={[styles.valueCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.valueOrb, { backgroundColor: colors.mint }]} />
         <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>保存したカード</Text>
         <Text style={[styles.totalValue, { color: colors.foreground }]}>
           {isLoaded && !loadError ? `${cards.length}枚` : '—'}
         </Text>
         <Text style={[styles.valueNote, { color: colors.mutedForeground }]}>
-          写真は保存していません。市場価格はまだ取得できません。
+          写真は保存していません。1点価格と詳しい相場は各カードの詳細で確認できます。
         </Text>
       </View>
 
@@ -59,13 +61,9 @@ export default function CollectionScreen() {
       ) : (
         <View style={styles.grid}>
           {cards.map((card) => (
-            <Pressable
+             <View
               key={card.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${card.name}のコレクション詳細`}
-              testID={`collection-card-${card.id}`}
-              onPress={() => router.push({ pathname: '/card/[id]', params: { id: card.id } })}
-              style={({ pressed }) => [{ width: '31.5%', opacity: pressed ? 0.75 : 1 }]}
+              style={styles.gridItem}
             >
               <CardThumbnail
                 card={{
@@ -77,13 +75,24 @@ export default function CollectionScreen() {
                 }}
                 tone="blue"
               />
-              <Text numberOfLines={1} style={[styles.cardName, { color: colors.foreground }]}>
-                {card.name}
-              </Text>
-              <Text numberOfLines={1} style={[styles.cardPrice, { color: colors.mutedForeground }]}>
-                {card.number}
-              </Text>
-            </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${card.name}のコレクション詳細`}
+                testID={`collection-card-${card.id}`}
+                onPress={() => router.push({ pathname: '/card/[id]', params: { id: card.id } })}
+                style={({ pressed }) => [
+                  styles.cardMeta,
+                  { backgroundColor: colors.card, opacity: pressed ? 0.78 : 1 },
+                ]}
+              >
+                <Text numberOfLines={1} style={[styles.cardName, { color: colors.foreground }]}>
+                  {card.name}
+                </Text>
+                <Text numberOfLines={1} style={[styles.cardPrice, { color: colors.mutedForeground }]}>
+                  {card.number}
+                </Text>
+              </Pressable>
+            </View>
           ))}
         </View>
       )}
@@ -91,25 +100,47 @@ export default function CollectionScreen() {
   );
 }
 
+import PlayfulScreen from '@/variants/playful/screens/(tabs)/collection';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function CollectionRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
+}
+
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.6 },
   title: { fontSize: 29, fontWeight: '700', marginTop: 6, letterSpacing: -0.5 },
   addButton: {
     width: 46,
     height: 46,
-    borderRadius: 16,
+    borderRadius: designTokens.radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  valueCard: { borderWidth: 1, borderRadius: 21, padding: 18, gap: 8 },
+  valueCard: {
+    borderWidth: 1,
+    borderRadius: designTokens.radius.hero,
+    padding: 20,
+    gap: 8,
+    overflow: 'hidden',
+    shadowColor: designTokens.shadows.soft.shadowColor,
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  valueOrb: { position: 'absolute', width: 150, height: 150, borderRadius: 150, right: -70, top: -78, opacity: 0.14 },
   valueLabel: { fontSize: 12, fontWeight: '600' },
   totalValue: { fontSize: 32, fontWeight: '700', letterSpacing: -1 },
   valueNote: { fontSize: 11 },
-  emptyState: { borderWidth: 1, borderRadius: 18, padding: 22, alignItems: 'center', gap: 12 },
+  emptyState: { borderWidth: 1, borderRadius: designTokens.radius.card, padding: 24, alignItems: 'center', gap: 12 },
   emptyTitle: { fontSize: 17, fontWeight: '700' },
   emptyAction: { fontSize: 14, fontWeight: '700', marginTop: 4 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  cardName: { fontSize: 12, fontWeight: '700', marginTop: 8 },
-  cardPrice: { fontSize: 11, marginTop: 3 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 20 },
+  gridItem: { width: '47.5%' },
+  cardMeta: { paddingTop: 9, paddingHorizontal: 3, gap: 3 },
+  cardName: { fontSize: 13, fontWeight: '700' },
+  cardPrice: { fontSize: 12 },
 });

@@ -1,0 +1,96 @@
+/**
+ * CARD EYE visual language. Keep visual values here rather than duplicating
+ * them in screens; the light palette is ready for a future appearance switch.
+ * All colors are original to CARD EYE and are not based on game type palettes.
+ */
+const dark = {
+  text: '#F3F7F7',
+  tint: '#A9D7E6',
+  background: '#101E2D',
+  foreground: '#F3F7F7',
+  card: '#1B2D40',
+  cardForeground: '#F3F7F7',
+  cardElevated: '#263B4E',
+  primary: '#A9D7E6',
+  primaryForeground: '#132839',
+  secondary: '#283E51',
+  secondaryForeground: '#E1EDF0',
+  muted: '#26384A',
+  mutedForeground: '#B5C7D0',
+  accent: '#345168',
+  accentForeground: '#F1F7F6',
+  positive: '#A6DEC7',
+  positiveSoft: '#24493F',
+  warning: '#F0D097',
+  warningSoft: '#4B3E31',
+  destructive: '#FFB5B7',
+  destructiveForeground: '#351C2A',
+  border: '#3B5366',
+  input: '#3B5366',
+  mint: '#A6DEC7',
+  lavender: '#C8BDEA',
+  coral: '#EFAFA9',
+  sky: '#A9D7E6',
+  softYellow: '#F0D097',
+  surfaceHighlight: '#304C60',
+  overlay: '#122335',
+} as const;
+
+const light = {
+  text: '#30234F',
+  tint: '#FF654E',
+  background: '#FFF5D9',
+  foreground: '#30234F',
+  card: '#FFFAF0',
+  cardForeground: '#30234F',
+  cardElevated: '#FFF8E8',
+  primary: '#FF654E',
+  primaryForeground: '#FFF5D9',
+  secondary: '#E9DCFF',
+  secondaryForeground: '#30234F',
+  muted: '#A8E8D1',
+  mutedForeground: '#74678B',
+  accent: '#FFD34D',
+  accentForeground: '#30234F',
+  positive: '#168467',
+  positiveSoft: '#DDF5E9',
+  warning: '#806125',
+  warningSoft: '#FFF0B8',
+  destructive: '#DF4D4D',
+  destructiveForeground: '#FFF5D9',
+  border: '#30234F',
+  input: '#CFC5D9',
+  mint: '#A8E8D1',
+  lavender: '#E9DCFF',
+  coral: '#FF654E',
+  sky: '#8DCFD0',
+  softYellow: '#FFD34D',
+  surfaceHighlight: '#E9DCFF',
+  overlay: '#FFF0C8',
+} as const;
+
+export const designTokens = {
+  colors: { dark, light },
+  typography: {
+    family: { regular: 'Inter_400Regular', medium: 'Inter_500Medium', semibold: 'Inter_600SemiBold', bold: 'Inter_700Bold' },
+    size: { caption: 12, body: 15, label: 14, title: 22, display: 30 },
+    lineHeight: { caption: 18, body: 23, title: 30, display: 39 },
+  },
+  spacing: { xxs: 4, xs: 8, sm: 12, md: 16, lg: 20, xl: 24, xxl: 32 },
+  radius: { small: 10, medium: 14, card: 18, hero: 22, pill: 999 },
+  shadows: {
+    soft: { shadowColor: '#30234F', shadowOpacity: 0.16, shadowRadius: 0, shadowOffset: { width: 3, height: 3 }, elevation: 3 },
+  },
+  gradients: {
+    heroDark: ['#263F53', '#1B2D40'] as const,
+    scanDark: ['#B9E2EA', '#A6D9DB'] as const,
+    heroLight: ['#FFD34D', '#FFE279'] as const,
+    scanLight: ['#FF654E', '#E04442'] as const,
+  },
+  surfaces: { card: 'card', elevated: 'cardElevated', subtle: 'secondary' },
+  borders: { subtle: 1, strong: 1.5 },
+  statusColors: { good: 'positive', caution: 'warning', attention: 'destructive' },
+  rarityColors: { default: 'sky', special: 'lavender', rare: 'mint', warm: 'softYellow' },
+} as const;
+
+export type CardEyePalette = { [Key in keyof typeof dark]: string };

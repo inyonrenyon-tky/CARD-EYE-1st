@@ -19,14 +19,21 @@ export interface CatalogCardResponse {
   card: CatalogCard;
 }
 
-/**
- * @nullable
- */
-export type FeaturedCardMarketPriceBasis = typeof FeaturedCardMarketPriceBasis[keyof typeof FeaturedCardMarketPriceBasis] | null;
+export type FeaturedCardReferenceStatus = typeof FeaturedCardReferenceStatus[keyof typeof FeaturedCardReferenceStatus];
 
 
-export const FeaturedCardMarketPriceBasis = {
-  confirmed_ungraded_sales: 'confirmed_ungraded_sales',
+export const FeaturedCardReferenceStatus = {
+  researching: 'researching',
+  available: 'available',
+  unavailable: 'unavailable',
+} as const;
+
+export type FeaturedCardSelectionReason = typeof FeaturedCardSelectionReason[keyof typeof FeaturedCardSelectionReason];
+
+
+export const FeaturedCardSelectionReason = {
+  scanned: 'scanned',
+  discovery: 'discovery',
 } as const;
 
 export interface FeaturedCard {
@@ -37,19 +44,55 @@ export interface FeaturedCard {
   rarity: string;
   imageUrl: string;
   /**
-     * @minimum 0
+     * Lower bound of the complete ungraded beautiful-to-mint AI reference range.
+     * @exclusiveMinimum 0
      * @nullable
      */
-  marketPrice: number | null;
+  referenceMin: number | null;
+  /**
+     * Upper bound of the complete ungraded beautiful-to-mint AI reference range.
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  referenceMax: number | null;
+  referenceStatus: FeaturedCardReferenceStatus;
   /** @nullable */
-  marketPriceBasis: FeaturedCardMarketPriceBasis;
-  /** @minimum 0 */
-  transactionCount: number;
+  referenceCheckedAt: string | null;
+  selectionReason: FeaturedCardSelectionReason;
 }
 
 export interface FeaturedCardsResponse {
   /** @maxItems 12 */
   cards: FeaturedCard[];
+}
+
+export type DiscoveryCardSignal = typeof DiscoveryCardSignal[keyof typeof DiscoveryCardSignal];
+
+
+export const DiscoveryCardSignal = {
+  recently_scanned: 'recently_scanned',
+  new_release: 'new_release',
+  catalog: 'catalog',
+} as const;
+
+export interface DiscoveryCard {
+  id: string;
+  name: string;
+  number: string;
+  series: string;
+  rarity: string;
+  /** @nullable */
+  imageUrl: string | null;
+  /** @nullable */
+  releaseDate: string | null;
+  signal: DiscoveryCardSignal;
+}
+
+export interface DiscoveryCardsResponse {
+  /** @maxItems 30 */
+  cards: DiscoveryCard[];
+  /** @minimum 0 */
+  total: number;
 }
 
 export interface SupabaseStatus {
@@ -420,6 +463,7 @@ export type PriceObservationSaleStatus = typeof PriceObservationSaleStatus[keyof
 
 export const PriceObservationSaleStatus = {
   sold: 'sold',
+  auction_closed: 'auction_closed',
   listing: 'listing',
   buyback: 'buyback',
 } as const;
@@ -436,6 +480,109 @@ export interface PriceObservation {
   /** @nullable */
   grade: null;
   saleStatus: PriceObservationSaleStatus;
+}
+
+export type RepresentativeMarketPriceCondition = typeof RepresentativeMarketPriceCondition[keyof typeof RepresentativeMarketPriceCondition];
+
+
+export const RepresentativeMarketPriceCondition = {
+  beautiful_ungraded: 'beautiful_ungraded',
+  condition_unverified: 'condition_unverified',
+  ai_estimated: 'ai_estimated',
+} as const;
+
+/**
+ * @nullable
+ */
+export type RepresentativeMarketPriceCalculationMethod = typeof RepresentativeMarketPriceCalculationMethod[keyof typeof RepresentativeMarketPriceCalculationMethod] | null;
+
+
+export const RepresentativeMarketPriceCalculationMethod = {
+  recent_sales_median: 'recent_sales_median',
+  extended_sales_median: 'extended_sales_median',
+  sales_plus_shop: 'sales_plus_shop',
+  shop_median: 'shop_median',
+  limited_market_estimate: 'limited_market_estimate',
+  observed_market_median: 'observed_market_median',
+  ai_estimate: 'ai_estimate',
+} as const;
+
+export type RepresentativeMarketPriceConfidenceLabel = typeof RepresentativeMarketPriceConfidenceLabel[keyof typeof RepresentativeMarketPriceConfidenceLabel];
+
+
+export const RepresentativeMarketPriceConfidenceLabel = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  insufficient: 'insufficient',
+} as const;
+
+/**
+ * @nullable
+ */
+export type RepresentativeMarketPriceWindowDays = typeof RepresentativeMarketPriceWindowDays[keyof typeof RepresentativeMarketPriceWindowDays] | null;
+
+
+export const RepresentativeMarketPriceWindowDays = {
+  NUMBER_14: 14,
+  NUMBER_30: 30,
+  NUMBER_60: 60,
+  NUMBER_90: 90,
+} as const;
+
+/**
+ * @nullable
+ */
+export type RepresentativeMarketPriceEvidenceType = typeof RepresentativeMarketPriceEvidenceType[keyof typeof RepresentativeMarketPriceEvidenceType] | null;
+
+
+export const RepresentativeMarketPriceEvidenceType = {
+  verified_sale: 'verified_sale',
+  auction_closed: 'auction_closed',
+  shop_listing: 'shop_listing',
+  ai_research: 'ai_research',
+} as const;
+
+/**
+ * Observed representative price when available; otherwise a separately labeled AI-estimated reference value, never a confirmed sale.
+ */
+export interface RepresentativeMarketPrice {
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  price: number | null;
+  condition: RepresentativeMarketPriceCondition;
+  /** @nullable */
+  calculationMethod: RepresentativeMarketPriceCalculationMethod;
+  /**
+     * @minimum 0
+     * @maximum 1
+     * @nullable
+     */
+  confidenceScore: number | null;
+  confidenceLabel: RepresentativeMarketPriceConfidenceLabel;
+  /** @minimum 0 */
+  sampleCount: number;
+  /** @nullable */
+  windowDays: RepresentativeMarketPriceWindowDays;
+  calculatedAt: string;
+  /** @nullable */
+  lastObservedAt: string | null;
+  sourceNames: string[];
+  /** @nullable */
+  evidenceType: RepresentativeMarketPriceEvidenceType;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  rangeMin: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  rangeMax: number | null;
+  note: string;
 }
 
 export type CardPricesCurrency = typeof CardPricesCurrency[keyof typeof CardPricesCurrency];
@@ -505,6 +652,7 @@ export interface CardPrices {
   marketPriceConfidence: CardPricesMarketPriceConfidence;
   /** @nullable */
   marketPriceBasis: CardPricesMarketPriceBasis;
+  representative: RepresentativeMarketPrice;
   observations: PriceObservation[];
   reference: PriceReference | null;
   summary: PriceSummary;
@@ -528,6 +676,15 @@ export interface MarketAnalysisInput {
   condition: ConditionAnalysis | null;
 }
 
+export type AiMarketSearchRequestMimeType = typeof AiMarketSearchRequestMimeType[keyof typeof AiMarketSearchRequestMimeType];
+
+
+export const AiMarketSearchRequestMimeType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+} as const;
+
 export interface AiMarketSearchRequest {
   /**
      * @minLength 1
@@ -549,6 +706,9 @@ export interface AiMarketSearchRequest {
      * @nullable
      */
   rarity?: string | null;
+  /** @maxLength 7000000 */
+  imageBase64?: string;
+  mimeType?: AiMarketSearchRequestMimeType;
 }
 
 export type AiMarketSearchSourceCategory = typeof AiMarketSearchSourceCategory[keyof typeof AiMarketSearchSourceCategory];
@@ -559,6 +719,10 @@ export const AiMarketSearchSourceCategory = {
   shop: 'shop',
   buyback: 'buyback',
   psa10: 'psa10',
+  psa9: 'psa9',
+  psa10_listing: 'psa10_listing',
+  ungraded_listing: 'ungraded_listing',
+  reference: 'reference',
 } as const;
 
 export interface AiMarketSearchSource {
@@ -572,6 +736,45 @@ export interface AiMarketSearchSource {
   price: number | null;
 }
 
+export type AiMarketSearchResponseDetectedGrade = typeof AiMarketSearchResponseDetectedGrade[keyof typeof AiMarketSearchResponseDetectedGrade];
+
+
+export const AiMarketSearchResponseDetectedGrade = {
+  PSA9: 'PSA9',
+  PSA10: 'PSA10',
+  ungraded: 'ungraded',
+  unknown: 'unknown',
+} as const;
+
+/**
+ * AI-estimated indicative range, not a confirmed price.
+ */
+export interface AiPriceEstimate {
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  min: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  max: number | null;
+  note: string;
+}
+
+/**
+ * Separate indicative estimates by condition/grade; these are AI estimates, not confirmed prices.
+ */
+export interface AiMarketEstimates {
+  ungradedPlayed: AiPriceEstimate;
+  ungradedExcellent: AiPriceEstimate;
+  ungradedMint: AiPriceEstimate;
+  psa9: AiPriceEstimate;
+  psa10: AiPriceEstimate;
+  psa10Listing: AiPriceEstimate;
+}
+
 export interface AiMarketSearchResponse {
   cardName: string;
   /** @nullable */
@@ -581,11 +784,27 @@ export interface AiMarketSearchResponse {
   /** @nullable */
   rarity: string | null;
   searchedAt: string;
+  identityNote: string;
+  detectedGrade: AiMarketSearchResponseDetectedGrade;
   /**
+     * AI-estimated reference only; not a confirmed transaction price.
      * @exclusiveMinimum 0
      * @nullable
      */
   marketPrice: number | null;
+  /**
+     * Lower bound from ungradedExcellent (A− to A); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  referenceMin: number | null;
+  /**
+     * Upper bound from ungradedMint (A to S); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  referenceMax: number | null;
+  estimates: AiMarketEstimates;
   /**
      * @exclusiveMinimum 0
      * @nullable
@@ -607,11 +826,13 @@ export interface AiMarketSearchResponse {
      */
   shopMax: number | null;
   /**
+     * Cited current shop buyback offers explicitly for ungraded A− to S cards only; unavailable if incompatible with shop sale or reference range.
      * @exclusiveMinimum 0
      * @nullable
      */
   buybackMin: number | null;
   /**
+     * Upper bound of qualifying buybacks; never higher than a displayed shop selling minimum.
      * @exclusiveMinimum 0
      * @nullable
      */
@@ -731,6 +952,19 @@ demo?: boolean;
  * @maxLength 100
  */
 name?: string;
+/**
+ * Exact provider-visible set code required for representative pricing.
+ * @minLength 1
+ * @maxLength 40
+ * @pattern ^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$
+ */
+series?: string;
+/**
+ * Printed rarity or variant, used to identify cards without a confirmed printed number.
+ * @minLength 1
+ * @maxLength 80
+ */
+rarity?: string;
 };
 
 export type GetCardPricesPeriod = typeof GetCardPricesPeriod[keyof typeof GetCardPricesPeriod];
@@ -742,4 +976,21 @@ export const GetCardPricesPeriod = {
   NUMBER_90: 90,
   NUMBER_365: 365,
 } as const;
+
+export type ListDiscoverCardsParams = {
+/**
+ * @minimum 1
+ * @maximum 30
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 10000
+ */
+offset?: number;
+/**
+ * @maxLength 60
+ */
+query?: string;
+};
 

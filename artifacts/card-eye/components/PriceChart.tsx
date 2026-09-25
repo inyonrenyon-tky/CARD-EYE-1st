@@ -16,10 +16,9 @@ type Props = {
   periodDays: number;
 };
 
-const CHART_COLORS = ['#3b82f6', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
-
 export function PriceChart({ sources, periodDays }: Props) {
   const colors = useColors();
+  const chartColors = [colors.sky, colors.coral, colors.mint, colors.softYellow, colors.lavender, colors.primary, colors.positive];
   const [activeSources, setActiveSources] = useState<Record<string, boolean>>(
     sources.reduce((acc, src) => ({ ...acc, [src.source]: true }), {})
   );
@@ -155,7 +154,7 @@ export function PriceChart({ sources, periodDays }: Props) {
               <Path
                 key={src.source}
                 d={makePath(src.history)}
-                stroke={CHART_COLORS[sources.findIndex(item => item.source === src.source) % CHART_COLORS.length]}
+                stroke={chartColors[sources.findIndex(item => item.source === src.source) % chartColors.length]}
                 strokeWidth="2.5"
                 strokeDasharray={src.type === 'sale' ? '5 5' : 'none'}
                 fill="none"
@@ -173,7 +172,7 @@ export function PriceChart({ sources, periodDays }: Props) {
       <View style={styles.legendContainer}>
         {sources.map((src, idx) => {
           const isActive = activeSources[src.source];
-          const color = CHART_COLORS[idx % CHART_COLORS.length];
+          const color = chartColors[idx % chartColors.length];
           const typeLabel = src.type === 'sale' ? '販売' : '成約';
           return (
             <Pressable

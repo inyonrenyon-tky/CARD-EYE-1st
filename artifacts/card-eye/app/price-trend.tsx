@@ -11,7 +11,7 @@ import { PriceChart } from '@/components/PriceChart';
 
 type TabId = 'sales' | 'transactions' | 'buybacks';
 
-export default function PriceTrendScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { uri: scanUri, scanId: activeScanId } = useScan();
@@ -96,7 +96,7 @@ export default function PriceTrendScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 34 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.cardIdentity, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.cardIdentity, { backgroundColor: colors.cardElevated, borderColor: colors.border }]}>
           <View style={styles.artworkWrap}>
             <CardThumbnail
               compact
@@ -154,7 +154,7 @@ export default function PriceTrendScreen() {
           <>
             {/* CARD EYE MARKET */}
             <View style={[styles.marketCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.marketTitle, { color: colors.primary }]}>CARD EYE MARKET</Text>
+              <Text style={[styles.marketTitle, { color: colors.tint }]}>CARD EYE MARKET · 成約ノート</Text>
               
               <View style={styles.marketPriceRow}>
                 {hasData ? (
@@ -185,11 +185,11 @@ export default function PriceTrendScreen() {
 
               {hasData && (
                 <View style={styles.marketStatsRow}>
-                  <View style={[styles.statBox, { backgroundColor: colors.secondary }]}>
+                    <View style={[styles.statBox, { backgroundColor: colors.overlay }]}>
                     <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>価格信頼度</Text>
                      <Text style={[styles.statValue, { color: colors.foreground }]}>{prices.summary.confidenceScore == null ? '未評価' : `${prices.summary.confidenceScore} / 100`}</Text>
                   </View>
-                  <View style={[styles.statBox, { backgroundColor: colors.secondary }]}>
+                    <View style={[styles.statBox, { backgroundColor: colors.overlay }]}>
                     <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>データ期間</Text>
                     <Text style={[styles.statValue, { color: colors.foreground }]}>{period === 365 ? '1年' : `${period}日間`}</Text>
                   </View>
@@ -220,19 +220,21 @@ export default function PriceTrendScreen() {
             </View>
 
             {/* Period Selector */}
-            <View style={styles.periodSelector}>
+             <View style={[styles.periodSelector, { backgroundColor: colors.secondary }]}>
               {([7, 30, 90, 365] as const).map(p => (
                 <Pressable
                   key={p}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: period === p }}
                   onPress={() => setPeriod(p)}
                   style={[
                     styles.periodBtn,
-                    period === p && { backgroundColor: colors.foreground }
+                     period === p && { backgroundColor: colors.primary }
                   ]}
                 >
                   <Text style={[
                     styles.periodText,
-                    { color: period === p ? colors.background : colors.mutedForeground }
+                     { color: period === p ? colors.primaryForeground : colors.mutedForeground }
                   ]}>
                     {p === 365 ? '1年' : `${p}日`}
                   </Text>
@@ -258,6 +260,8 @@ export default function PriceTrendScreen() {
                 return (
                   <Pressable
                     key={tab}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isActive }}
                     onPress={() => setActiveTab(tab)}
                     style={[
                       styles.tabBtn,
@@ -329,6 +333,14 @@ export default function PriceTrendScreen() {
   );
 }
 
+import PlayfulScreen from '@/variants/playful/screens/price-trend';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function PriceTrendRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
+}
+
 function SourceListSales({ sources, expanded, onToggle, median, period, onShowChart }: { sources: PriceListing[], expanded: Record<string, boolean>, onToggle: (s:string)=>void, median?: number | null, period: number, onShowChart: () => void }) {
   const colors = useColors();
   if (sources.length === 0) return <NoDataMessage />;
@@ -354,8 +366,8 @@ function SourceListSales({ sources, expanded, onToggle, median, period, onShowCh
                   </View>
                 )}
                 {isOldData(src.lastUpdated) && (
-                  <View style={[styles.refBadge, { backgroundColor: colors.destructive + '40' }]}>
-                    <Text style={[styles.refBadgeText, { color: colors.destructive }]}>古いデータ</Text>
+                    <View style={[styles.refBadge, { backgroundColor: colors.warningSoft }]}>
+                      <Text style={[styles.refBadgeText, { color: colors.warning }]}>古いデータ</Text>
                   </View>
                 )}
               </View>
@@ -402,8 +414,8 @@ function SourceListTransactions({ sources, expanded, onToggle, median, totalCoun
               <View style={styles.sourceRowLeft}>
                 <Text style={[styles.sourceName, { color: colors.foreground }]}>{src.displayName}</Text>
                 {isOldData(src.lastUpdated) && (
-                  <View style={[styles.refBadge, { backgroundColor: colors.destructive + '40' }]}>
-                    <Text style={[styles.refBadgeText, { color: colors.destructive }]}>古いデータ</Text>
+                  <View style={[styles.refBadge, { backgroundColor: colors.warningSoft }]}>
+                    <Text style={[styles.refBadgeText, { color: colors.warning }]}>古いデータ</Text>
                   </View>
                 )}
               </View>
@@ -463,8 +475,8 @@ function SourceListBuybacks({ sources, expanded, onToggle, median, marketPrice }
               <View style={styles.sourceRowLeft}>
                 <Text style={[styles.sourceName, { color: colors.foreground }]}>{src.displayName}</Text>
                 {isOldData(src.lastUpdated) && (
-                  <View style={[styles.refBadge, { backgroundColor: colors.destructive + '40' }]}>
-                    <Text style={[styles.refBadgeText, { color: colors.destructive }]}>古いデータ</Text>
+                  <View style={[styles.refBadge, { backgroundColor: colors.warningSoft }]}>
+                    <Text style={[styles.refBadgeText, { color: colors.warning }]}>古いデータ</Text>
                   </View>
                 )}
               </View>
@@ -544,7 +556,7 @@ const styles = StyleSheet.create({
   rarityPill: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   rarity: { fontSize: 11, fontWeight: '700' },
   
-  marketCard: { borderWidth: 1, borderRadius: 20, padding: 20, gap: 14, alignItems: 'center' },
+   marketCard: { borderWidth: 1, borderRadius: 28, padding: 22, gap: 14, alignItems: 'center' },
   marketTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 1 },
   marketPriceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
   marketPrice: { fontSize: 36, fontWeight: '700', letterSpacing: -1 },
@@ -556,18 +568,18 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 14, fontWeight: '700' },
   marketExplanation: { fontSize: 11, marginTop: 4 },
   
-  periodSelector: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  periodBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+   periodSelector: { flexDirection: 'row', justifyContent: 'center', gap: 4, padding: 4, borderRadius: 16 },
+   periodBtn: { flex: 1, alignItems: 'center', paddingHorizontal: 10, paddingVertical: 9, borderRadius: 12 },
   periodText: { fontSize: 13, fontWeight: '600' },
   
-  chartSection: { borderWidth: 1, borderRadius: 20, padding: 16, gap: 16 },
+   chartSection: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 16 },
   sectionTitle: { fontSize: 15, fontWeight: '700' },
   
-  tabsContainer: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#333' },
+   tabsContainer: { flexDirection: 'row', borderBottomWidth: 1 },
   tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2 },
   tabText: { fontSize: 13 },
   
-  sourcesContainer: { borderWidth: 1, borderRadius: 20, overflow: 'hidden' },
+   sourcesContainer: { borderWidth: 1, borderRadius: 24, overflow: 'hidden' },
   sourceListInner: { padding: 16 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
   summaryLabel: { fontSize: 13, fontWeight: '600' },
@@ -587,7 +599,7 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   detailLabel: { fontSize: 12 },
   detailValue: { fontSize: 12, fontWeight: '600' },
-  showChartBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#333', borderRadius: 8 },
+   showChartBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 10, borderWidth: 1, borderRadius: 12 },
   showChartText: { fontSize: 13, fontWeight: '700' },
   
   noData: { padding: 40, alignItems: 'center', justifyContent: 'center' },

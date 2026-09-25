@@ -5,7 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { FeaturedCardMarketPriceBasis } from './featuredCardMarketPriceBasis';
+import type { FeaturedCardReferenceStatus } from './featuredCardReferenceStatus';
+import type { FeaturedCardSelectionReason } from './featuredCardSelectionReason';
 
 export interface FeaturedCard {
   id: string;
@@ -15,12 +16,19 @@ export interface FeaturedCard {
   rarity: string;
   imageUrl: string;
   /**
-     * @minimum 0
+     * Lower bound of the complete ungraded beautiful-to-mint AI reference range.
+     * @exclusiveMinimum 0
      * @nullable
      */
-  marketPrice: number | null;
+  referenceMin: number | null;
+  /**
+     * Upper bound of the complete ungraded beautiful-to-mint AI reference range.
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  referenceMax: number | null;
+  referenceStatus: FeaturedCardReferenceStatus;
   /** @nullable */
-  marketPriceBasis: FeaturedCardMarketPriceBasis;
-  /** @minimum 0 */
-  transactionCount: number;
+  referenceCheckedAt: Date | null;
+  selectionReason: FeaturedCardSelectionReason;
 }

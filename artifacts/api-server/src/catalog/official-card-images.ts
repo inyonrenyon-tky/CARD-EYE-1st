@@ -24,7 +24,7 @@ export type RepresentativeImageResult = {
   cardId: string | null;
   imageUrl: string | null;
   sourceUrl: string | null;
-  status: "matched" | "unmatched" | "ambiguous" | "unavailable";
+  status: "matched" | "representative" | "unmatched" | "ambiguous" | "unavailable";
 };
 
 export type OfficialCardDetail = {
@@ -413,6 +413,32 @@ function output(status: RepresentativeImageResult["status"]): RepresentativeImag
   return { cardId: null, imageUrl: null, sourceUrl: null, status };
 }
 
+async function representativeFromOfficialSearch(input: RepresentativeImageInput): Promise<RepresentativeImageResult | null> {
+  if (!input.cardName.trim() || /^(?:不明|unknown)$/i.test(input.cardName.trim())) return null;
+  const pages = await searchOfficialCards(input.cardName);
+  const candidates = [...pages.pages.values()].flat()
+    .filter((card) => normalize(card.cardNameAltText) === normalize(input.cardName));
+  const setHint = input.series.trim().match(/^[A-Za-z0-9_-]{2,16}$/)?.[0]?.toLowerCase();
+  const ranked = setHint
+    ? [...candidates].sort((a, b) => {
+      const matchesSet = (card: OfficialSearchCard) =>
+        new URL(card.cardThumbFile, OFFICIAL_ORIGIN).pathname.split("/")[5]?.toLowerCase() === setHint ? 1 : 0;
+      return matchesSet(b) - matchesSet(a);
+    })
+    : candidates;
+  for (const card of ranked) {
+    const image = new URL(card.cardThumbFile, OFFICIAL_ORIGIN);
+    if (image.origin !== OFFICIAL_ORIGIN || !image.pathname.startsWith("/assets/images/card_images/large/")) continue;
+    return {
+      cardId: null,
+      imageUrl: image.toString(),
+      sourceUrl: new URL(`${DETAIL_PATH}${encodeURIComponent(card.cardID)}/regu/all`, OFFICIAL_ORIGIN).toString(),
+      status: "representative",
+    };
+  }
+  return null;
+}
+
 function identityMatchesInput(
   row: {
     name: string;
@@ -727,24 +753,28 @@ async function persistProviderImage(
 export async function resolveRepresentativeImage(
   input: RepresentativeImageInput,
 ): Promise<RepresentativeImageResult> {
-  if (!catalogDbConfigured()) return output("unavailable");
+  const representative = async () => {
+    try { return await representativeFromOfficialSearch(input); }
+    catch { return null; }
+  };
+  if (!input.cardName.trim()) return output("unmatched");
   const expectedNumber = parseCollectorNumber(input.cardNumber, input.series);
-  if (!expectedNumber || !input.cardName.trim() || !input.series.trim() || !input.rarity.trim()) {
-    return output("unmatched");
+  if (!catalogDbConfigured() || !expectedNumber || !input.series.trim() || !input.rarity.trim()) {
+    return await representative() ?? output("unmatched");
   }
   try {
     const cached = await getCachedImage(input);
     if (cached) return cached;
     const cacheKey = [normalize(input.cardName), normalize(input.cardNumber), normalize(input.series), normalizeRarity(input.rarity)].join("|");
     const previous = negativeCache.get(cacheKey);
-    if (previous && previous.expiresAt > Date.now()) return output(previous.status);
+    if (previous && previous.expiresAt > Date.now()) return await representative() ?? output(previous.status);
 
     const resolution = await cardImageProvider.lookup(input);
     if (resolution.status !== "matched") {
       if (resolution.status !== "unavailable") {
         negativeCache.set(cacheKey, { status: resolution.status, expiresAt: Date.now() + CACHE_TTL_MS });
       }
-      return output(resolution.status);
+      return await representative() ?? output(resolution.status);
     }
     const image = resolution.image;
     const identityMatch = selectExactOfficialCard(input, [{
@@ -758,10 +788,10 @@ export async function resolveRepresentativeImage(
       sourceUrl: image.sourceUrl,
     }], true);
     if (identityMatch.status !== "matched" || !image.approvedForDisplay) {
-      return output(identityMatch.status === "matched" ? "unmatched" : identityMatch.status);
+      return await representative() ?? output(identityMatch.status === "matched" ? "unmatched" : identityMatch.status);
     }
     const persisted = await persistProviderImage(input, image);
-    if (!persisted || (input.cardId && persisted.cardId !== input.cardId)) return output("ambiguous");
+    if (!persisted || (input.cardId && persisted.cardId !== input.cardId)) return await representative() ?? output("ambiguous");
     negativeCache.delete(cacheKey);
     return {
       cardId: persisted.cardId,
@@ -770,6 +800,6 @@ export async function resolveRepresentativeImage(
       status: "matched",
     };
   } catch {
-    return output("unavailable");
+    return await representative() ?? output("unavailable");
   }
 }

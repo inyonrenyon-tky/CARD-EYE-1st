@@ -10,6 +10,7 @@ import { useScan } from '@/hooks/ScanContext';
 import { useSavedCards } from '@/hooks/SavedCardsContext';
 import { PhotoReadError, readPhoto } from '@/lib/readPhoto';
 import { useAnalyzeCondition, type ConditionAnalysis } from '@workspace/api-client-react';
+import { designTokens } from '@/constants/design-tokens';
 
 type IconName =
   | 'maximize'
@@ -85,7 +86,7 @@ function buildEvaluations(condition: ConditionAnalysis): Evaluation[] {
 function rankLabel(rank: ConditionAnalysis['overall_rank']): string {
   return rank === 'unassessable' ? '評価できません' : rank;
 }
-export default function ConditionCheckScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { analysis: savedAnalysis, uri: scanUri, scanId: activeScanId } = useScan();
@@ -203,7 +204,7 @@ export default function ConditionCheckScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.imageWrap}>
+        <View style={[styles.imageWrap, { backgroundColor: colors.cardElevated }]}>
           {displayUri ? (
             <Image source={{ uri: displayUri }} resizeMode="contain" style={styles.image} />
           ) : (
@@ -466,6 +467,14 @@ export default function ConditionCheckScreen() {
   );
 }
 
+import PlayfulScreen from '@/variants/playful/screens/condition-check';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function ConditionCheckRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   topBar: {
@@ -484,25 +493,31 @@ const styles = StyleSheet.create({
   },
   topTitle: { fontSize: 16, fontWeight: '700' },
   topSpacer: { width: 42, height: 42 },
-  content: { paddingHorizontal: 20, alignItems: 'center', gap: 17 },
+  content: { paddingHorizontal: 20, alignItems: 'center', gap: 19 },
   imageWrap: {
-    width: 116,
-    height: 160,
-    borderRadius: 16,
+    width: 132,
+    height: 184,
+    borderRadius: designTokens.radius.card,
     overflow: 'hidden',
+    padding: 5,
+    shadowColor: designTokens.shadows.soft.shadowColor,
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
   image: { width: '100%', height: '100%' },
   headingBlock: { width: '100%', gap: 6 },
   eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.6 },
   heading: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
-  description: { fontSize: 13, lineHeight: 20 },
-  overallCard: { width: '100%', borderWidth: 1, borderRadius: 20, padding: 16 },
-  rankCard: { width: '100%', borderWidth: 1, borderRadius: 20, padding: 18, gap: 8 },
+  description: { fontSize: 14, lineHeight: 21 },
+  overallCard: { width: '100%', borderWidth: 1, borderRadius: designTokens.radius.card, padding: 17, shadowColor: designTokens.shadows.soft.shadowColor, shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 1 },
+  rankCard: { width: '100%', borderWidth: 1, borderRadius: designTokens.radius.card, padding: 19, gap: 9 },
   rankHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   rankCopy: { flex: 1, gap: 4 },
   rankTitle: { fontSize: 13, fontWeight: '700' },
-  rankValue: { fontSize: 34, fontWeight: '800', letterSpacing: -0.6 },
-  rankReason: { fontSize: 13, lineHeight: 19 },
+  rankValue: { fontSize: 36, fontWeight: '800', letterSpacing: -0.6 },
+  rankReason: { fontSize: 14, lineHeight: 21 },
   rankGuidance: { fontSize: 12, fontWeight: '600', lineHeight: 18, marginTop: 3 },
   loadingCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   overallHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -515,21 +530,21 @@ const styles = StyleSheet.create({
   aiPill: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6 },
   aiPillText: { fontSize: 10, fontWeight: '700' },
   sectionHeader: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { fontSize: 18, fontWeight: '700' },
+  sectionTitle: { fontSize: 19, fontWeight: '700' },
   sectionCaption: { fontSize: 12 },
   evaluationList: { width: '100%', gap: 9 },
-  evaluationCard: { borderWidth: 1, borderRadius: 17, overflow: 'hidden' },
-  evaluationRow: { minHeight: 76, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 11 },
-  evaluationIcon: { width: 37, height: 37, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  evaluationCard: { borderWidth: 1, borderRadius: designTokens.radius.medium, overflow: 'hidden', shadowColor: designTokens.shadows.soft.shadowColor, shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 1 },
+  evaluationRow: { minHeight: 82, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  evaluationIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   evaluationCopy: { flex: 1, gap: 4 },
-  evaluationLabel: { fontSize: 11 },
-  evaluationValue: { fontSize: 13, fontWeight: '700' },
-  detailBox: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 13, paddingVertical: 12 },
-  detailDescription: { fontSize: 12, lineHeight: 18 },
-  confidenceText: { fontSize: 11, marginTop: 5 },
-  warning: { width: '100%', borderRadius: 15, padding: 13, flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
-  warningText: { flex: 1, fontSize: 11, lineHeight: 17 },
-  saveButton: { width: '100%', minHeight: 54, borderRadius: 17, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  evaluationLabel: { fontSize: 12 },
+  evaluationValue: { fontSize: 14, fontWeight: '700', lineHeight: 20 },
+  detailBox: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, paddingVertical: 13 },
+  detailDescription: { fontSize: 13, lineHeight: 20 },
+  confidenceText: { fontSize: 12, marginTop: 6 },
+  warning: { width: '100%', borderRadius: designTokens.radius.small, padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
+  warningText: { flex: 1, fontSize: 12, lineHeight: 18 },
+  saveButton: { width: '100%', minHeight: 56, borderRadius: designTokens.radius.medium, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   saveButtonText: { fontSize: 15, fontWeight: '700' },
   saveHint: { width: '100%', fontSize: 12, lineHeight: 18 },
   priceButton: { width: '100%', minHeight: 54, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },

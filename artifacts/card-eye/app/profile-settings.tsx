@@ -3,10 +3,11 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Screen } from '@/components/Screen';
+import { designTokens } from '@/constants/design-tokens';
 import { useColors } from '@/hooks/useColors';
 import { useDeviceProfile } from '@/hooks/DeviceProfileContext';
 
-export default function ProfileSettingsScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const { displayName, isLoaded, loadError, saveDisplayName } = useDeviceProfile();
   const [draft, setDraft] = useState(displayName);
@@ -46,10 +47,18 @@ export default function ProfileSettingsScreen() {
         >
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.foreground }]}>表示名の設定</Text>
+        <View>
+          <Text style={[styles.kicker, { color: colors.tint }]}>MY SHELF / IDENTITY</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>表示名の設定</Text>
+        </View>
       </View>
 
       <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.heroIcon, { backgroundColor: colors.accent }]}>
+          <Feather name="edit-3" size={20} color={colors.primary} />
+        </View>
+        <Text style={[styles.lead, { color: colors.foreground }]}>コレクションに似合う名前を。</Text>
+        <Text style={[styles.sublead, { color: colors.mutedForeground }]}>この端末でカードを集めるあなたの表示名です。</Text>
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.foreground }]}>この端末の表示名</Text>
           <TextInput
@@ -95,11 +104,23 @@ export default function ProfileSettingsScreen() {
   );
 }
 
+import PlayfulScreen from '@/variants/playful/screens/profile-settings';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function ProfileSettingsRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
+}
+
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   back: { minWidth: 42, minHeight: 42, justifyContent: 'center' },
-  title: { fontSize: 22, fontWeight: '700' },
-  panel: { borderWidth: 1, borderRadius: 20, padding: 18, gap: 20 },
+  kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.3, marginBottom: 3 },
+  title: { fontSize: 24, fontWeight: '700', letterSpacing: -0.4 },
+  panel: { borderWidth: 1, borderRadius: designTokens.radius.hero, padding: 20, gap: 12, ...designTokens.shadows.soft },
+  heroIcon: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  lead: { fontSize: 17, fontWeight: '700', marginTop: 2 },
+  sublead: { fontSize: 13, lineHeight: 20, marginBottom: 4 },
   field: { gap: 9 },
   label: { fontSize: 14, fontWeight: '700' },
   input: { minHeight: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, fontSize: 16 },

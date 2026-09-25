@@ -11,9 +11,9 @@ function parseInput(value: unknown): RepresentativeImageInput | null {
   const body = value as Record<string, unknown>;
   if (
     typeof body.cardName !== "string" || body.cardName.trim().length === 0 || body.cardName.length > 120 ||
-    typeof body.cardNumber !== "string" || body.cardNumber.trim().length === 0 || body.cardNumber.length > 40 ||
-    typeof body.series !== "string" || body.series.trim().length === 0 || body.series.length > 120 ||
-    typeof body.rarity !== "string" || body.rarity.trim().length === 0 || body.rarity.length > 40
+    (body.cardNumber !== undefined && (typeof body.cardNumber !== "string" || body.cardNumber.length > 40)) ||
+    (body.series !== undefined && (typeof body.series !== "string" || body.series.length > 120)) ||
+    (body.rarity !== undefined && (typeof body.rarity !== "string" || body.rarity.length > 40))
   ) {
     return null;
   }
@@ -23,9 +23,9 @@ function parseInput(value: unknown): RepresentativeImageInput | null {
   }
   return {
     cardName: body.cardName.trim(),
-    cardNumber: body.cardNumber.trim(),
-    series: body.series.trim(),
-    rarity: body.rarity.trim(),
+    cardNumber: typeof body.cardNumber === "string" ? body.cardNumber.trim() : "",
+    series: typeof body.series === "string" ? body.series.trim() : "",
+    rarity: typeof body.rarity === "string" ? body.rarity.trim() : "",
     cardId: body.cardId as string | null | undefined,
   };
 }
@@ -34,7 +34,7 @@ router.post("/cards/representative-image", async (req, res): Promise<void> => {
   const input = parseInput(req.body);
   if (!input) {
     res.status(400).json({
-      error: "cardName, cardNumber, series, and rarity are required; cardId must be a UUID or null.",
+      error: "cardName is required; cardId must be a UUID or null.",
     });
     return;
   }

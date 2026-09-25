@@ -11,6 +11,7 @@ export type PriceObservationSaleStatus = typeof PriceObservationSaleStatus[keyof
 
 export const PriceObservationSaleStatus = {
   sold: 'sold',
+  auction_closed: 'auction_closed',
   listing: 'listing',
   buyback: 'buyback',
 } as const;

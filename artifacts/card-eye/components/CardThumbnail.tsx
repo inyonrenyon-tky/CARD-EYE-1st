@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { customFetch } from '@workspace/api-client-react';
 import type { CardRecord } from '@/constants/mock-data';
 import { useColors } from '@/hooks/useColors';
+import { designTokens } from '@/constants/design-tokens';
+import { CardImageViewer } from '@/components/CardImageViewer';
 
 export type CardImageIdentity = {
   name: string;
@@ -29,7 +31,7 @@ type RepresentativeImageResponse = {
   cardId: string | null;
   imageUrl: string | null;
   sourceUrl: string | null;
-  status: 'matched' | 'unmatched' | 'ambiguous' | 'unavailable';
+  status: 'matched' | 'representative' | 'unmatched' | 'ambiguous' | 'unavailable';
 };
 
 type CardThumbnailProps = {
@@ -71,7 +73,7 @@ export function useCardRepresentativeImage(
   approvedImageUrl?: string | null,
 ) {
   const identity = resolveIdentity(card);
-  const enabled = Boolean(identity.cardName && identity.series && identity.cardNumber && identity.rarity);
+  const enabled = Boolean(identity.cardName);
 
   return useQuery({
     queryKey: [
@@ -88,7 +90,7 @@ export function useCardRepresentativeImage(
       body: JSON.stringify(identity),
     }),
     enabled: enabled && !isCardImageUrl(approvedImageUrl),
-    staleTime: (query) => query.state.data?.status === 'matched'
+    staleTime: (query) => query.state.data?.status === 'matched' || query.state.data?.status === 'representative'
       ? 24 * 60 * 60 * 1000
       : query.state.data?.status === 'unavailable'
         ? 0
@@ -113,7 +115,7 @@ export function CardThumbnail({
     queryFn: () => customFetch<CatalogImageResponse>(
       `/api/cards/catalog/${encodeURIComponent(normalizedIdentity.cardId!)}`,
     ),
-    enabled: !approvedImageUrl && !!normalizedIdentity.cardId && /^[a-f0-9-]{36}$/i.test(normalizedIdentity.cardId),
+    enabled: imageUrl === undefined && !approvedImageUrl && !!normalizedIdentity.cardId && /^[a-f0-9-]{36}$/i.test(normalizedIdentity.cardId),
     retry: false,
     staleTime: 10 * 60 * 1000,
   });
@@ -123,39 +125,50 @@ export function CardThumbnail({
   const catalogOrProvidedImage = approvedImageUrl ?? catalogImageUrl;
   const imageQuery = useCardRepresentativeImage(card, scanId, catalogOrProvidedImage);
   const representativeImage = catalogOrProvidedImage
-    ?? (imageQuery.data?.status === 'matched' && isCardImageUrl(imageQuery.data.imageUrl)
+    ?? ((imageQuery.data?.status === 'matched' || imageQuery.data?.status === 'representative') && isCardImageUrl(imageQuery.data.imageUrl)
       ? imageQuery.data.imageUrl
       : null);
   const personalScanImage = scanId && scanImageUri ? scanImageUri : null;
   const [failedRepresentativeImage, setFailedRepresentativeImage] = useState<string | null>(null);
   const [failedScanImage, setFailedScanImage] = useState<string | null>(null);
+  const [viewingUri, setViewingUri] = useState<string | null>(null);
   const activeRepresentativeImage = representativeImage === failedRepresentativeImage ? null : representativeImage;
   const activeScanImage = personalScanImage === failedScanImage ? null : personalScanImage;
+  const showScanFirst = imageQuery.data?.status === 'representative' && !!activeScanImage && !catalogOrProvidedImage;
+  const displayingScan = showScanFirst || (!activeRepresentativeImage && !!activeScanImage);
+  const displayedUri = displayingScan ? activeScanImage : activeRepresentativeImage;
 
   return (
     <View
-      accessible
-      accessibilityLabel={`${card.name}のカード画像`}
-      style={[styles.frame, compact && styles.compactFrame, { backgroundColor: colors.card }]}
+      accessible={!displayedUri}
+      accessibilityLabel={displayedUri ? undefined : `${card.name}のカード画像`}
+      style={[styles.frame, compact && styles.compactFrame, { backgroundColor: colors.cardElevated }]}
     >
-      {activeRepresentativeImage ? (
-        <CardImage
-          name={card.name}
-          uri={activeRepresentativeImage}
-          compact={compact}
-          onError={() => setFailedRepresentativeImage(activeRepresentativeImage)}
-        />
-      ) : activeScanImage ? (
-        <CardImage
-          name={card.name}
-          uri={activeScanImage}
-          compact={compact}
-          scanImage
-          onError={() => setFailedScanImage(activeScanImage)}
-        />
+      {displayedUri ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${card.name}の画像を拡大`}
+          testID="open-card-image"
+          onPress={(event) => {
+            event.stopPropagation();
+            setViewingUri(displayedUri);
+          }}
+          style={styles.imagePress}
+        >
+          <CardImage
+            name={card.name}
+            uri={displayedUri}
+            compact={compact}
+            scanImage={displayingScan}
+            onError={() => displayingScan
+              ? setFailedScanImage(displayedUri)
+              : setFailedRepresentativeImage(displayedUri)}
+          />
+        </Pressable>
       ) : (
         <CardImage name={card.name} compact={compact} />
       )}
+      {viewingUri ? <CardImageViewer name={card.name} uri={viewingUri} onClose={() => setViewingUri(null)} /> : null}
     </View>
   );
 }
@@ -186,7 +199,7 @@ export function CardImage({
     );
   }
   return (
-    <View style={[styles.placeholder, { backgroundColor: colors.secondary }]}>
+    <View style={[styles.placeholder, { backgroundColor: colors.cardElevated }]}>
       <Feather name="image" size={compact ? 17 : 28} color={colors.mutedForeground} />
       {!compact ? (
         <Text numberOfLines={2} style={[styles.placeholderText, { color: colors.mutedForeground }]}>
@@ -204,9 +217,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: designTokens.radius.medium,
   },
   compactFrame: {
-    borderRadius: 10,
+    borderRadius: designTokens.radius.small,
     height: '100%',
     aspectRatio: undefined,
   },
@@ -214,6 +228,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  imagePress: { width: '100%', height: '100%' },
   placeholder: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 8 },
   placeholderText: { fontSize: 11, textAlign: 'center' },
 });

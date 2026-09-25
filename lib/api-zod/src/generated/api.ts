@@ -211,13 +211,32 @@ export const getCardPricesQueryPeriodDefault = 30;
 export const getCardPricesQueryDemoDefault = false;
 export const getCardPricesQueryNameMax = 100;
 
+export const getCardPricesQuerySeriesMax = 40;
+
+
+export const getCardPricesQuerySeriesRegExp = new RegExp('^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$');
+export const getCardPricesQueryRarityMax = 80;
+
 
 
 export const GetCardPricesQueryParams = zod.object({
   "period": zod.union([zod.literal(7),zod.literal(30),zod.literal(90),zod.literal(365)]).default(getCardPricesQueryPeriodDefault),
   "demo": zod.coerce.boolean().default(getCardPricesQueryDemoDefault),
-  "name": zod.coerce.string().max(getCardPricesQueryNameMax).optional()
+  "name": zod.coerce.string().max(getCardPricesQueryNameMax).optional(),
+  "series": zod.coerce.string().min(1).max(getCardPricesQuerySeriesMax).regex(getCardPricesQuerySeriesRegExp).optional().describe('Exact provider-visible set code required for representative pricing.'),
+  "rarity": zod.coerce.string().min(1).max(getCardPricesQueryRarityMax).optional().describe('Printed rarity or variant, used to identify cards without a confirmed printed number.')
 })
+
+export const getCardPricesResponseRepresentativePriceExclusiveMin = 0;
+
+export const getCardPricesResponseRepresentativeConfidenceScoreMin = 0;
+export const getCardPricesResponseRepresentativeConfidenceScoreMax = 1;
+
+export const getCardPricesResponseRepresentativeSampleCountMin = 0;
+
+export const getCardPricesResponseRepresentativeRangeMinExclusiveMin = 0;
+
+export const getCardPricesResponseRepresentativeRangeMaxExclusiveMin = 0;
 
 export const getCardPricesResponseObservationsItemPriceExclusiveMin = 0;
 
@@ -231,6 +250,22 @@ export const GetCardPricesResponse = zod.object({
   "marketPrice": zod.number().nullable(),
   "marketPriceConfidence": zod.enum(['high', 'medium', 'low', 'insufficient']),
   "marketPriceBasis": zod.union([zod.literal('confirmed_ungraded_sales'),zod.literal('shop_listing_reference'),zod.literal(null)]).nullable(),
+  "representative": zod.object({
+  "price": zod.number().gt(getCardPricesResponseRepresentativePriceExclusiveMin).nullable(),
+  "condition": zod.enum(['beautiful_ungraded', 'condition_unverified', 'ai_estimated']),
+  "calculationMethod": zod.union([zod.literal('recent_sales_median'),zod.literal('extended_sales_median'),zod.literal('sales_plus_shop'),zod.literal('shop_median'),zod.literal('limited_market_estimate'),zod.literal('observed_market_median'),zod.literal('ai_estimate'),zod.literal(null)]).nullable(),
+  "confidenceScore": zod.number().min(getCardPricesResponseRepresentativeConfidenceScoreMin).max(getCardPricesResponseRepresentativeConfidenceScoreMax).nullable(),
+  "confidenceLabel": zod.enum(['high', 'medium', 'low', 'insufficient']),
+  "sampleCount": zod.number().int().min(getCardPricesResponseRepresentativeSampleCountMin),
+  "windowDays": zod.union([zod.literal(14),zod.literal(30),zod.literal(60),zod.literal(90),zod.literal(null)]).nullable(),
+  "calculatedAt": zod.coerce.date(),
+  "lastObservedAt": zod.coerce.date().nullable(),
+  "sourceNames": zod.array(zod.string()),
+  "evidenceType": zod.union([zod.literal('verified_sale'),zod.literal('auction_closed'),zod.literal('shop_listing'),zod.literal('ai_research'),zod.literal(null)]).nullable(),
+  "rangeMin": zod.number().gt(getCardPricesResponseRepresentativeRangeMinExclusiveMin).nullable(),
+  "rangeMax": zod.number().gt(getCardPricesResponseRepresentativeRangeMaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('Observed representative price when available; otherwise a separately labeled AI-estimated reference value, never a confirmed sale.'),
   "observations": zod.array(zod.object({
   "source": zod.string(),
   "sourceType": zod.enum(['SHOP', 'MARKETPLACE']),
@@ -239,7 +274,7 @@ export const GetCardPricesResponse = zod.object({
   "condition": zod.string().nullable(),
   "graded": zod.literal(false),
   "grade": zod.null(),
-  "saleStatus": zod.enum(['sold', 'listing', 'buyback'])
+  "saleStatus": zod.enum(['sold', 'auction_closed', 'listing', 'buyback'])
 })),
   "reference": zod.union([zod.object({
   "source": zod.string(),
@@ -310,11 +345,11 @@ export const GetCardPricesResponse = zod.object({
 
 
 /**
- * @summary Get curated featured cards with confirmed recent sale prices when available
+ * @summary Discover approved-image cards ranked by confirmed recent transactions and scans
  */
-export const getFeaturedCardsResponseCardsItemMarketPriceMin = 0;
+export const getFeaturedCardsResponseCardsItemReferenceMinExclusiveMin = 0;
 
-export const getFeaturedCardsResponseCardsItemTransactionCountMin = 0;
+export const getFeaturedCardsResponseCardsItemReferenceMaxExclusiveMin = 0;
 
 export const getFeaturedCardsResponseCardsMax = 12;
 
@@ -328,10 +363,53 @@ export const GetFeaturedCardsResponse = zod.object({
   "series": zod.string(),
   "rarity": zod.string(),
   "imageUrl": zod.string().url(),
-  "marketPrice": zod.number().min(getFeaturedCardsResponseCardsItemMarketPriceMin).nullable(),
-  "marketPriceBasis": zod.union([zod.literal('confirmed_ungraded_sales'),zod.literal(null)]).nullable(),
-  "transactionCount": zod.number().int().min(getFeaturedCardsResponseCardsItemTransactionCountMin)
+  "referenceMin": zod.number().gt(getFeaturedCardsResponseCardsItemReferenceMinExclusiveMin).nullable().describe('Lower bound of the complete ungraded beautiful-to-mint AI reference range.'),
+  "referenceMax": zod.number().gt(getFeaturedCardsResponseCardsItemReferenceMaxExclusiveMin).nullable().describe('Upper bound of the complete ungraded beautiful-to-mint AI reference range.'),
+  "referenceStatus": zod.enum(['researching', 'available', 'unavailable']),
+  "referenceCheckedAt": zod.coerce.date().nullable(),
+  "selectionReason": zod.enum(['scanned', 'discovery'])
 })).max(getFeaturedCardsResponseCardsMax)
+})
+
+
+/**
+ * @summary Browse actual Japanese catalog cards using recent releases and scan activity
+ */
+export const listDiscoverCardsQueryLimitDefault = 24;
+export const listDiscoverCardsQueryLimitMax = 30;
+
+export const listDiscoverCardsQueryOffsetDefault = 0;
+export const listDiscoverCardsQueryOffsetMin = 0;
+export const listDiscoverCardsQueryOffsetMax = 10000;
+
+export const listDiscoverCardsQueryQueryMax = 60;
+
+
+
+export const ListDiscoverCardsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listDiscoverCardsQueryLimitMax).default(listDiscoverCardsQueryLimitDefault),
+  "offset": zod.coerce.number().int().min(listDiscoverCardsQueryOffsetMin).max(listDiscoverCardsQueryOffsetMax).default(listDiscoverCardsQueryOffsetDefault),
+  "query": zod.coerce.string().max(listDiscoverCardsQueryQueryMax).optional()
+})
+
+export const listDiscoverCardsResponseCardsMax = 30;
+
+export const listDiscoverCardsResponseTotalMin = 0;
+
+
+
+export const ListDiscoverCardsResponse = zod.object({
+  "cards": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "number": zod.string(),
+  "series": zod.string(),
+  "rarity": zod.string(),
+  "imageUrl": zod.string().url().nullable(),
+  "releaseDate": zod.coerce.date().nullable(),
+  "signal": zod.enum(['recently_scanned', 'new_release', 'catalog'])
+})).max(listDiscoverCardsResponseCardsMax),
+  "total": zod.number().int().min(listDiscoverCardsResponseTotalMin)
 })
 
 
@@ -351,6 +429,121 @@ export const GetCatalogCardResponse = zod.object({
   "rarity": zod.string(),
   "imageUrl": zod.string().url().nullable()
 })
+})
+
+
+/**
+ * Returns current cited market research for the catalog identity. AI estimates are references only and are not stored as confirmed price observations.
+ * @summary Get shared AI market research for a canonical catalog card
+ */
+export const GetCatalogCardAiMarketResultParams = zod.object({
+  "cardId": zod.coerce.string().uuid()
+})
+
+export const getCatalogCardAiMarketResultResponseMarketPriceExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseReferenceMinExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseReferenceMaxExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesUngradedPlayedMinExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesUngradedPlayedMaxExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesUngradedExcellentMinExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesUngradedExcellentMaxExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesUngradedMintMinExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesUngradedMintMaxExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesPsa9MinExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesPsa9MaxExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesPsa10MinExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesPsa10MaxExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesPsa10ListingMinExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseEstimatesPsa10ListingMaxExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseSaleMedianExclusiveMin = 0;
+
+
+export const getCatalogCardAiMarketResultResponseShopMinExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseShopMaxExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseBuybackMinExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseBuybackMaxExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponsePsa10MedianExclusiveMin = 0;
+
+export const getCatalogCardAiMarketResultResponseSourcesItemPriceExclusiveMin = 0;
+
+
+
+export const GetCatalogCardAiMarketResultResponse = zod.object({
+  "cardName": zod.string(),
+  "cardNumber": zod.string().nullable(),
+  "series": zod.string().nullable(),
+  "rarity": zod.string().nullable(),
+  "searchedAt": zod.coerce.date(),
+  "identityNote": zod.string(),
+  "detectedGrade": zod.enum(['PSA9', 'PSA10', 'ungraded', 'unknown']),
+  "marketPrice": zod.number().gt(getCatalogCardAiMarketResultResponseMarketPriceExclusiveMin).nullable().describe('AI-estimated reference only; not a confirmed transaction price.'),
+  "referenceMin": zod.number().gt(getCatalogCardAiMarketResultResponseReferenceMinExclusiveMin).nullable().describe('Lower bound from ungradedExcellent (A− to A); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.'),
+  "referenceMax": zod.number().gt(getCatalogCardAiMarketResultResponseReferenceMaxExclusiveMin).nullable().describe('Upper bound from ungradedMint (A to S); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.'),
+  "estimates": zod.object({
+  "ungradedPlayed": zod.object({
+  "min": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesUngradedPlayedMinExclusiveMin).nullable(),
+  "max": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesUngradedPlayedMaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "ungradedExcellent": zod.object({
+  "min": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesUngradedExcellentMinExclusiveMin).nullable(),
+  "max": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesUngradedExcellentMaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "ungradedMint": zod.object({
+  "min": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesUngradedMintMinExclusiveMin).nullable(),
+  "max": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesUngradedMintMaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "psa9": zod.object({
+  "min": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesPsa9MinExclusiveMin).nullable(),
+  "max": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesPsa9MaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "psa10": zod.object({
+  "min": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesPsa10MinExclusiveMin).nullable(),
+  "max": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesPsa10MaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "psa10Listing": zod.object({
+  "min": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesPsa10ListingMinExclusiveMin).nullable(),
+  "max": zod.number().gt(getCatalogCardAiMarketResultResponseEstimatesPsa10ListingMaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.')
+}).describe('Separate indicative estimates by condition/grade; these are AI estimates, not confirmed prices.'),
+  "saleMedian": zod.number().gt(getCatalogCardAiMarketResultResponseSaleMedianExclusiveMin).nullable(),
+  "saleCount": zod.number().int().min(1).nullable(),
+  "shopMin": zod.number().gt(getCatalogCardAiMarketResultResponseShopMinExclusiveMin).nullable(),
+  "shopMax": zod.number().gt(getCatalogCardAiMarketResultResponseShopMaxExclusiveMin).nullable(),
+  "buybackMin": zod.number().gt(getCatalogCardAiMarketResultResponseBuybackMinExclusiveMin).nullable().describe('Cited current shop buyback offers explicitly for ungraded A− to S cards only; unavailable if incompatible with shop sale or reference range.'),
+  "buybackMax": zod.number().gt(getCatalogCardAiMarketResultResponseBuybackMaxExclusiveMin).nullable().describe('Upper bound of qualifying buybacks; never higher than a displayed shop selling minimum.'),
+  "psa10Median": zod.number().gt(getCatalogCardAiMarketResultResponsePsa10MedianExclusiveMin).nullable(),
+  "explanation": zod.string(),
+  "sources": zod.array(zod.object({
+  "title": zod.string(),
+  "url": zod.string().url(),
+  "category": zod.enum(['sale', 'shop', 'buyback', 'psa10', 'psa9', 'psa10_listing', 'ungraded_listing', 'reference']),
+  "price": zod.number().gt(getCatalogCardAiMarketResultResponseSourcesItemPriceExclusiveMin).nullable()
+}))
 })
 
 
@@ -545,16 +738,48 @@ export const searchCardMarketWithAiBodySeriesMax = 100;
 
 export const searchCardMarketWithAiBodyRarityMax = 40;
 
+export const searchCardMarketWithAiBodyImageBase64Max = 7000000;
+
 
 
 export const SearchCardMarketWithAiBody = zod.object({
   "cardName": zod.string().min(1).max(searchCardMarketWithAiBodyCardNameMax),
   "cardNumber": zod.string().max(searchCardMarketWithAiBodyCardNumberMax).nullish(),
   "series": zod.string().max(searchCardMarketWithAiBodySeriesMax).nullish(),
-  "rarity": zod.string().max(searchCardMarketWithAiBodyRarityMax).nullish()
+  "rarity": zod.string().max(searchCardMarketWithAiBodyRarityMax).nullish(),
+  "imageBase64": zod.string().max(searchCardMarketWithAiBodyImageBase64Max).optional(),
+  "mimeType": zod.enum(['image/jpeg', 'image/png', 'image/webp']).optional()
 })
 
 export const searchCardMarketWithAiResponseMarketPriceExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseReferenceMinExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseReferenceMaxExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesUngradedPlayedMinExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesUngradedPlayedMaxExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesUngradedExcellentMinExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesUngradedExcellentMaxExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesUngradedMintMinExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesUngradedMintMaxExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesPsa9MinExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesPsa9MaxExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesPsa10MinExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesPsa10MaxExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesPsa10ListingMinExclusiveMin = 0;
+
+export const searchCardMarketWithAiResponseEstimatesPsa10ListingMaxExclusiveMin = 0;
 
 export const searchCardMarketWithAiResponseSaleMedianExclusiveMin = 0;
 
@@ -579,19 +804,55 @@ export const SearchCardMarketWithAiResponse = zod.object({
   "series": zod.string().nullable(),
   "rarity": zod.string().nullable(),
   "searchedAt": zod.coerce.date(),
-  "marketPrice": zod.number().gt(searchCardMarketWithAiResponseMarketPriceExclusiveMin).nullable(),
+  "identityNote": zod.string(),
+  "detectedGrade": zod.enum(['PSA9', 'PSA10', 'ungraded', 'unknown']),
+  "marketPrice": zod.number().gt(searchCardMarketWithAiResponseMarketPriceExclusiveMin).nullable().describe('AI-estimated reference only; not a confirmed transaction price.'),
+  "referenceMin": zod.number().gt(searchCardMarketWithAiResponseReferenceMinExclusiveMin).nullable().describe('Lower bound from ungradedExcellent (A− to A); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.'),
+  "referenceMax": zod.number().gt(searchCardMarketWithAiResponseReferenceMaxExclusiveMin).nullable().describe('Upper bound from ungradedMint (A to S); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.'),
+  "estimates": zod.object({
+  "ungradedPlayed": zod.object({
+  "min": zod.number().gt(searchCardMarketWithAiResponseEstimatesUngradedPlayedMinExclusiveMin).nullable(),
+  "max": zod.number().gt(searchCardMarketWithAiResponseEstimatesUngradedPlayedMaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "ungradedExcellent": zod.object({
+  "min": zod.number().gt(searchCardMarketWithAiResponseEstimatesUngradedExcellentMinExclusiveMin).nullable(),
+  "max": zod.number().gt(searchCardMarketWithAiResponseEstimatesUngradedExcellentMaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "ungradedMint": zod.object({
+  "min": zod.number().gt(searchCardMarketWithAiResponseEstimatesUngradedMintMinExclusiveMin).nullable(),
+  "max": zod.number().gt(searchCardMarketWithAiResponseEstimatesUngradedMintMaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "psa9": zod.object({
+  "min": zod.number().gt(searchCardMarketWithAiResponseEstimatesPsa9MinExclusiveMin).nullable(),
+  "max": zod.number().gt(searchCardMarketWithAiResponseEstimatesPsa9MaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "psa10": zod.object({
+  "min": zod.number().gt(searchCardMarketWithAiResponseEstimatesPsa10MinExclusiveMin).nullable(),
+  "max": zod.number().gt(searchCardMarketWithAiResponseEstimatesPsa10MaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.'),
+  "psa10Listing": zod.object({
+  "min": zod.number().gt(searchCardMarketWithAiResponseEstimatesPsa10ListingMinExclusiveMin).nullable(),
+  "max": zod.number().gt(searchCardMarketWithAiResponseEstimatesPsa10ListingMaxExclusiveMin).nullable(),
+  "note": zod.string()
+}).describe('AI-estimated indicative range, not a confirmed price.')
+}).describe('Separate indicative estimates by condition/grade; these are AI estimates, not confirmed prices.'),
   "saleMedian": zod.number().gt(searchCardMarketWithAiResponseSaleMedianExclusiveMin).nullable(),
   "saleCount": zod.number().int().min(1).nullable(),
   "shopMin": zod.number().gt(searchCardMarketWithAiResponseShopMinExclusiveMin).nullable(),
   "shopMax": zod.number().gt(searchCardMarketWithAiResponseShopMaxExclusiveMin).nullable(),
-  "buybackMin": zod.number().gt(searchCardMarketWithAiResponseBuybackMinExclusiveMin).nullable(),
-  "buybackMax": zod.number().gt(searchCardMarketWithAiResponseBuybackMaxExclusiveMin).nullable(),
+  "buybackMin": zod.number().gt(searchCardMarketWithAiResponseBuybackMinExclusiveMin).nullable().describe('Cited current shop buyback offers explicitly for ungraded A− to S cards only; unavailable if incompatible with shop sale or reference range.'),
+  "buybackMax": zod.number().gt(searchCardMarketWithAiResponseBuybackMaxExclusiveMin).nullable().describe('Upper bound of qualifying buybacks; never higher than a displayed shop selling minimum.'),
   "psa10Median": zod.number().gt(searchCardMarketWithAiResponsePsa10MedianExclusiveMin).nullable(),
   "explanation": zod.string(),
   "sources": zod.array(zod.object({
   "title": zod.string(),
   "url": zod.string().url(),
-  "category": zod.enum(['sale', 'shop', 'buyback', 'psa10']),
+  "category": zod.enum(['sale', 'shop', 'buyback', 'psa10', 'psa9', 'psa10_listing', 'ungraded_listing', 'reference']),
   "price": zod.number().gt(searchCardMarketWithAiResponseSourcesItemPriceExclusiveMin).nullable()
 }))
 })

@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
 import { SearchCardMarketWithAiBody, SearchCardMarketWithAiResponse } from "@workspace/api-zod";
-import { aiMarketSearchService } from "../lib/ai-market-search";
+import {
+  aiMarketSearchService,
+  AiMarketSearchRateLimitError,
+  reserveAiMarketSearchQuota,
+} from "../lib/ai-market-search";
 
 const router: IRouter = Router();
-const WINDOW_MS = 60 * 60_000;
-const perClientLimit = 12;
-const requests = new Map<string, { count: number; until: number }>();
 
 router.post("/cards/ai-market-search", async (req, res) => {
   res.set("Cache-Control", "no-store");
@@ -21,20 +22,22 @@ router.post("/cards/ai-market-search", async (req, res) => {
     res.status(400).json({ error: "A card name and at least a card number or series are required." });
     return;
   }
-
-  const now = Date.now();
-  const clientKey = req.ip ?? "unknown";
-  const previous = requests.get(clientKey);
-  const current = previous && previous.until > now ? previous : { count: 0, until: now + WINDOW_MS };
-  if (current.count >= perClientLimit) {
-    res.set("Retry-After", String(Math.ceil((current.until - now) / 1000)));
-    res.status(429).json({ error: "Too many AI market searches. Please try again later." });
+  const imageBase64 = parsed.data.imageBase64;
+  const mimeType = parsed.data.mimeType;
+  const photo = imageBase64 ? Buffer.from(imageBase64, "base64") : null;
+  const matchesMimeType = photo && (
+    (mimeType === "image/jpeg" && photo[0] === 0xff && photo[1] === 0xd8)
+    || (mimeType === "image/png" && photo.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
+    || (mimeType === "image/webp" && photo.toString("ascii", 0, 4) === "RIFF" && photo.toString("ascii", 8, 12) === "WEBP")
+  );
+  if (imageBase64 && (
+    !mimeType
+    || !/^[A-Za-z0-9+/]*={0,2}$/.test(imageBase64)
+    || !matchesMimeType
+    || photo!.length > 5 * 1024 * 1024
+  )) {
+    res.status(400).json({ error: "Provide a valid card photo of up to 5 MiB and its mime type." });
     return;
-  }
-  current.count++;
-  requests.set(clientKey, current);
-  if (requests.size > 1000) {
-    for (const [key, value] of requests) if (value.until <= now) requests.delete(key);
   }
 
   try {
@@ -43,9 +46,17 @@ router.post("/cards/ai-market-search", async (req, res) => {
       cardNumber: cardNumber || null,
       series: series || null,
       rarity: typeof parsed.data.rarity === "string" ? parsed.data.rarity.normalize("NFKC").trim() || null : null,
+      ...(imageBase64 && mimeType ? { imageBase64, mimeType } : {}),
+    }, () => {
+      reserveAiMarketSearchQuota(req.ip ?? "unknown");
     });
     res.json(SearchCardMarketWithAiResponse.parse(result));
-  } catch {
+  } catch (error) {
+    if (error instanceof AiMarketSearchRateLimitError) {
+      res.set("Retry-After", String(error.retryAfterSeconds));
+      res.status(429).json({ error: "Too many AI market searches. Please try again later." });
+      return;
+    }
     req.log.error("AI market web search failed");
     res.status(502).json({ error: "AI market web research is temporarily unavailable or returned invalid data." });
   }

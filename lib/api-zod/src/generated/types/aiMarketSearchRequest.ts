@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AiMarketSearchRequestMimeType } from './aiMarketSearchRequestMimeType';
 
 export interface AiMarketSearchRequest {
   /**
@@ -27,4 +28,7 @@ export interface AiMarketSearchRequest {
      * @nullable
      */
   rarity?: string | null;
+  /** @maxLength 7000000 */
+  imageBase64?: string;
+  mimeType?: AiMarketSearchRequestMimeType;
 }

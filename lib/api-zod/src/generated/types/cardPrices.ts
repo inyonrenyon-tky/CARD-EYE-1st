@@ -16,6 +16,7 @@ import type { PriceReference } from './priceReference';
 import type { PriceSourceAvailability } from './priceSourceAvailability';
 import type { PriceSourceConfig } from './priceSourceConfig';
 import type { PriceSummary } from './priceSummary';
+import type { RepresentativeMarketPrice } from './representativeMarketPrice';
 
 export interface CardPrices {
   cardId: string;
@@ -27,6 +28,7 @@ export interface CardPrices {
   marketPriceConfidence: CardPricesMarketPriceConfidence;
   /** @nullable */
   marketPriceBasis: CardPricesMarketPriceBasis;
+  representative: RepresentativeMarketPrice;
   observations: PriceObservation[];
   reference: PriceReference | null;
   summary: PriceSummary;

@@ -7,7 +7,26 @@ import Svg, { Path, Defs, LinearGradient, Stop, Line, Text as SvgText, Circle } 
 import { CardThumbnail } from '@/components/CardThumbnail';
 import { useColors } from '@/hooks/useColors';
 import { useScan } from '@/hooks/ScanContext';
-import { getGetCardPricesQueryKey, useGetCardPrices, type GetCardPricesPeriod, useSearchCardMarketWithAi, type AiMarketSearchResponse } from '@workspace/api-client-react';
+import { readPhoto } from '@/lib/readPhoto';
+import { beautifulPlusReferenceRange } from '@/lib/aiReferenceRange';
+import { getCollectorNumber } from '@/lib/collectorNumber';
+import { RepresentativePrice, useRepresentativePrice } from '@/components/RepresentativePrice';
+import { getGetCardPricesQueryKey, getGetCatalogCardAiMarketResultQueryKey, useGetCardPrices, useGetCatalogCardAiMarketResult, type GetCardPricesPeriod, useSearchCardMarketWithAi, type AiMarketSearchResponse } from '@workspace/api-client-react';
+
+function formatEstimatedPrice(estimate: AiMarketSearchResponse['estimates']['psa10']): string {
+  if (estimate.min != null && estimate.max != null) {
+    return estimate.min === estimate.max
+      ? `約¥${estimate.min.toLocaleString()}`
+      : `¥${estimate.min.toLocaleString()}〜¥${estimate.max.toLocaleString()}`;
+  }
+  if (estimate.min != null) return `¥${estimate.min.toLocaleString()}〜`;
+  if (estimate.max != null) return `〜¥${estimate.max.toLocaleString()}`;
+  return '目安なし';
+}
+
+const unavailableEstimate: AiMarketSearchResponse['estimates']['psa10'] = {
+  min: null, max: null, note: '',
+};
 
 function PriceChart({
   points,
@@ -109,60 +128,95 @@ function formatChartDate(dateStr: string) {
   return dateStr;
 }
 
-export default function MarketOverviewScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { uri: scanUri, scanId: activeScanId } = useScan();
-  const { scanId: routeScanId, cardName, series, cardNumber, rarity, catalogCardId } = useLocalSearchParams<{
+  const { scanId: routeScanId, cardName, series, cardNumber, rarity, catalogCardId, representativeCardId, announcementImage } = useLocalSearchParams<{
     scanId?: string;
     cardName?: string;
     series?: string;
     cardNumber?: string;
     rarity?: string;
     catalogCardId?: string;
+    representativeCardId?: string;
+    announcementImage?: string;
   }>();
   const uri = routeScanId && routeScanId === activeScanId ? scanUri : undefined;
+  const officialAnnouncementImage = /^https:\/\/www\.30th\.pokemon-card\.com\/images\/m6a\/cards\/[a-zA-Z0-9_-]+\.png$/.test(announcementImage ?? '')
+    ? announcementImage : undefined;
 
-  const [aiResult, setAiResult] = useState<AiMarketSearchResponse | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
+  const useCatalogPricing = !!catalogCardId && !uri;
+  const catalogAiQuery = useGetCatalogCardAiMarketResult(catalogCardId ?? '', {
+    query: {
+      queryKey: getGetCatalogCardAiMarketResultQueryKey(catalogCardId ?? ''),
+      enabled: useCatalogPricing && !!cardName,
+      retry: false,
+      staleTime: 0,
+      refetchOnMount: 'always',
+    },
+  });
+  const [searchedResult, setSearchedResult] = useState<AiMarketSearchResponse | null>(null);
+  const [searchedError, setSearchedError] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const aiResult = useCatalogPricing ? (catalogAiQuery.isFetching ? null : catalogAiQuery.data ?? null) : searchedResult;
+  const aiError = useCatalogPricing ? (catalogAiQuery.isError ? 'AIによる相場検索に失敗しました。' : null) : searchedError;
+  const isAiLoading = useCatalogPricing ? catalogAiQuery.isPending || catalogAiQuery.isFetching : isSearching;
+  const [identityExpanded, setIdentityExpanded] = useState(false);
+  const [expandedEstimate, setExpandedEstimate] = useState<string | null>(null);
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const requestedAi = useRef<string | null>(null);
   const searchMarketAi = useSearchCardMarketWithAi();
 
   const runAiSearch = async () => {
+    if (useCatalogPricing) {
+      await catalogAiQuery.refetch();
+      return;
+    }
     if (!cardName || (!cardNumber && !series)) return;
-    setIsAiLoading(true);
-    setAiError(null);
+    setIsSearching(true);
+    setSearchedError(null);
     try {
+      const photo = uri ? await readPhoto(uri).catch(() => null) : null;
       const res = await searchMarketAi.mutateAsync({
         data: {
           cardName,
           cardNumber: cardNumber || null,
           series: series || null,
           rarity: rarity || null,
+          ...(photo ? { imageBase64: photo.imageBase64, mimeType: photo.mimeType } : {}),
         }
       });
-      setAiResult(res);
+      setSearchedResult(res);
     } catch (err) {
-      setAiError('AIによる相場検索に失敗しました。');
+      setSearchedError('AIによる相場検索に失敗しました。');
     } finally {
-      setIsAiLoading(false);
+      setIsSearching(false);
     }
   };
 
-  const identityKey = `${cardName}|${cardNumber}|${series}|${rarity}`;
+  const identityKey = `${cardName}|${cardNumber}|${series}|${rarity}|${catalogCardId}|${routeScanId}|${uri ?? ''}`;
   useEffect(() => {
-    if (!cardName || (!cardNumber && !series) || requestedAi.current === identityKey) return;
+    if (useCatalogPricing || !cardName || (!cardNumber && !series) || requestedAi.current === identityKey) return;
     requestedAi.current = identityKey;
+    setSearchedResult(null);
     void runAiSearch();
-  }, [identityKey, cardName]);
+  }, [identityKey, cardName, uri, useCatalogPricing]);
 
   const [period, setPeriod] = useState<GetCardPricesPeriod>(30);
-  const legacyCardId = cardNumber?.match(/(?:^|\s)(\d{1,4}\/[\w-]{2,25})(?=\s|$)/i)?.[1];
-  const cardId = catalogCardId || legacyCardId;
+  const printedNumber = getCollectorNumber(cardNumber);
+  const cardId = catalogCardId || printedNumber;
+  const representativeQuery = useRepresentativePrice(
+    catalogCardId ?? representativeCardId,
+    printedNumber,
+    cardName,
+    series,
+    rarity,
+  );
   const encodedId = cardId ? encodeURIComponent(cardId) : '';
-  const priceQuery = { period, demo: false, name: cardName };
+  const priceQuery = { period, demo: false, name: cardName, ...(series ? { series } : {}), ...(rarity ? { rarity } : {}) };
   const { data: prices, isLoading, error, refetch } = useGetCardPrices(encodedId, priceQuery, {
     request: { cache: 'no-store' },
     query: {
@@ -170,17 +224,33 @@ export default function MarketOverviewScreen() {
       queryKey: getGetCardPricesQueryKey(encodedId, priceQuery),
     },
   });
-  const points = useMemo(
+  const yahooAuctionQuotes = useMemo(
     () => (prices?.sources.transactions ?? [])
+      .filter((source) => source.source === 'yahoo_auction')
       .flatMap((source) => source.history)
-      .sort((a, b) => a.date.localeCompare(b.date)),
+      .filter((quote) => Number.isFinite(quote.price) && quote.price > 0),
     [prices],
   );
+  const points = useMemo(
+    () => [...yahooAuctionQuotes].sort((a, b) => a.date.localeCompare(b.date)),
+    [yahooAuctionQuotes],
+  );
+  const auctionPrices = yahooAuctionQuotes.map((quote) => quote.price).sort((a, b) => a - b);
+  const auctionMedian = auctionPrices.length
+    ? auctionPrices.length % 2
+      ? auctionPrices[Math.floor(auctionPrices.length / 2)]
+      : (auctionPrices[auctionPrices.length / 2 - 1] + auctionPrices[auctionPrices.length / 2]) / 2
+    : null;
+  const auctionHighest = auctionPrices.length ? auctionPrices[auctionPrices.length - 1] : null;
+  const auctionLowest = auctionPrices.length ? auctionPrices[0] : null;
   const hasIdentity = !!cardId && !!cardName?.trim();
-  const hasConfirmedMarketPrice = prices?.marketPrice != null
-    && prices.marketPriceBasis === 'confirmed_ungraded_sales'
-    && prices.summary.transactionCount >= 3;
-  const confirmedMarketPrice = hasConfirmedMarketPrice ? prices.marketPrice : null;
+  const referenceRange = beautifulPlusReferenceRange(aiResult?.estimates);
+  const buybackRange = aiResult?.buybackMin != null && aiResult.buybackMax != null
+    && aiResult.buybackMin <= aiResult.buybackMax
+    && (referenceRange === null || aiResult.buybackMax <= referenceRange.max)
+    && (aiResult.shopMin == null || aiResult.buybackMax <= aiResult.shopMin)
+    && (aiResult.shopMax == null || aiResult.buybackMax <= aiResult.shopMax)
+    ? { min: aiResult.buybackMin, max: aiResult.buybackMax } : null;
 
   const baseTop = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
   const baseBottom = Platform.OS === 'web' ? Math.max(insets.bottom, 34) : insets.bottom;
@@ -221,7 +291,7 @@ export default function MarketOverviewScreen() {
           </View>
           <View style={styles.warningTextWrap}>
             <Text style={[styles.warningText, { color: colors.warning }]}>
-              AIがWebで調べた参考相場です。確認できた成約データは別枠に表示し、査定額とは区別します。
+              上段の1点価格は根拠・確信度を区別して表示します。以下のAI参考相場は状態別の推定で、確認済み成約価格や査定額ではありません。
             </Text>
           </View>
         </View>
@@ -238,7 +308,7 @@ export default function MarketOverviewScreen() {
               }}
               scanImageUri={uri}
               scanId={uri ? routeScanId : null}
-              tone="orange"
+              imageUrl={officialAnnouncementImage}
               compact
             />
           </View>
@@ -253,8 +323,15 @@ export default function MarketOverviewScreen() {
           </View>
         </View>
 
+        <RepresentativePrice
+          price={representativeQuery.data?.representative}
+          isLoading={representativeQuery.isLoading}
+          error={!!representativeQuery.error}
+          detailed
+        />
+
         <View style={styles.aiContainer}>
-          <Text style={[styles.sectionHeading, { color: colors.foreground }]}>AI推定現在相場</Text>
+          <Text style={[styles.sectionHeading, { color: colors.foreground }]}>AI参考相場 · 状態別の推定</Text>
           {isAiLoading ? (
             <View style={styles.aiLoadingWrap}>
               <ActivityIndicator color={colors.primary} />
@@ -270,26 +347,78 @@ export default function MarketOverviewScreen() {
             </View>
           ) : aiResult ? (
             <>
+              {aiResult.identityNote ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="カードの特定根拠を見る"
+                  accessibilityState={{ expanded: identityExpanded }}
+                  onPress={() => setIdentityExpanded((expanded) => !expanded)}
+                  style={{ width: '100%' }}
+                >
+                  <Text
+                    numberOfLines={identityExpanded ? undefined : 2}
+                    style={[styles.identityNote, { color: colors.mutedForeground }]}
+                  >{aiResult.identityNote}</Text>
+                </Pressable>
+              ) : null}
               <View style={[styles.aiTable, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={[styles.aiTableRow, { backgroundColor: colors.secondary, borderBottomColor: colors.border }]}>
                   <Text style={[styles.aiTableCellLeft, { color: colors.mutedForeground }]}>指標</Text>
                   <Text style={[styles.aiTableCellRight, { color: colors.mutedForeground }]}>現在の目安</Text>
                 </View>
                 <View style={[styles.aiTableRow, { backgroundColor: colors.secondary, borderBottomColor: colors.border }]}>
-                  <Text style={[styles.aiTableCellLeft, { color: colors.foreground, fontWeight: '700' }]}>市場価格（基準値）</Text>
+                   <Text style={[styles.aiTableCellLeft, { color: colors.foreground, fontWeight: '700' }]}>
+                     美品以上（未鑑定）参考相場
+                   </Text>
                   <Text style={[styles.aiTableCellRight, { color: colors.primary, fontSize: 21 }]}>
-                    {aiResult.marketPrice != null ? `約${aiResult.marketPrice.toLocaleString()}円` : 'データ不足'}
+                     {referenceRange
+                       ? `¥${referenceRange.min.toLocaleString()}〜¥${referenceRange.max.toLocaleString()}`
+                       : '目安なし'}
                   </Text>
                 </View>
                 <View style={[styles.aiTableRow, { borderBottomColor: colors.border }]}>
-                  <Text style={[styles.aiTableCellLeft, { color: colors.mutedForeground }]}>未鑑定 成約中央値</Text>
-                  <Text style={[styles.aiTableCellRight, { color: colors.foreground }]}>
-                    {aiResult.saleMedian != null
-                      ? `約${aiResult.saleMedian.toLocaleString()}円${aiResult.saleCount ? `（${aiResult.saleCount}件）` : ''}`
-                      : 'データ不足'}
+                  <Text style={[styles.aiTableCellLeft, { color: colors.mutedForeground }]}>店舗 買取価格帯（美品以上）</Text>
+                  <Text style={[styles.aiTableCellRight, { color: buybackRange ? colors.foreground : colors.mutedForeground }]}>
+                    {buybackRange
+                      ? buybackRange.min === buybackRange.max
+                        ? `¥${buybackRange.min.toLocaleString()}`
+                        : `¥${buybackRange.min.toLocaleString()} 〜 ¥${buybackRange.max.toLocaleString()}`
+                      : '条件に合う掲載情報なし'}
                   </Text>
                 </View>
-                <View style={[styles.aiTableRow, { borderBottomColor: colors.border }]}>
+                 <View style={[styles.aiTableRow, { backgroundColor: colors.secondary, borderBottomColor: colors.border }]}>
+                   <Text style={[styles.aiSectionLabel, { color: colors.mutedForeground }]}>状態・鑑定グレード別のAI推定 · タップで根拠を見る</Text>
+                 </View>
+                 {([
+                    ['美品（A−〜A）', aiResult.estimates?.ungradedExcellent ?? unavailableEstimate],
+                    ['極美品（A〜S）', aiResult.estimates?.ungradedMint ?? unavailableEstimate],
+                   ['PSA9', aiResult.estimates?.psa9 ?? unavailableEstimate],
+                   ['PSA10', aiResult.estimates?.psa10 ?? unavailableEstimate],
+                   ['PSA10 出品価格の目安', aiResult.estimates?.psa10Listing ?? unavailableEstimate],
+                 ] as const).map(([label, estimate]) => (
+                   <Pressable
+                     key={label}
+                     accessibilityRole="button"
+                     accessibilityLabel={`${label}の参考相場と推定根拠`}
+                     accessibilityState={{ expanded: expandedEstimate === label }}
+                     onPress={() => setExpandedEstimate((current) => current === label ? null : label)}
+                     style={[styles.estimateRow, { borderBottomColor: colors.border }]}
+                   >
+                     <View style={styles.estimateTop}>
+                       <Text style={[styles.aiTableCellLeft, { color: colors.mutedForeground }]}>{label}</Text>
+                       <Text style={[styles.estimateValue, { color: estimate.min != null || estimate.max != null ? colors.foreground : colors.mutedForeground }]}>
+                         {formatEstimatedPrice(estimate)}
+                       </Text>
+                     </View>
+                     {estimate.note ? (
+                       <Text
+                         numberOfLines={expandedEstimate === label ? undefined : 2}
+                         style={[styles.estimateNote, { color: colors.mutedForeground }]}
+                       >{estimate.note}</Text>
+                     ) : null}
+                   </Pressable>
+                 ))}
+                 {aiResult.shopMin != null || aiResult.shopMax != null ? <View style={[styles.aiTableRow, { borderBottomColor: colors.border }]}>
                   <Text style={[styles.aiTableCellLeft, { color: colors.mutedForeground }]}>店舗 販売価格帯</Text>
                   <Text style={[styles.aiTableCellRight, { color: colors.foreground }]}>
                     {aiResult.shopMin != null && aiResult.shopMax != null
@@ -298,27 +427,36 @@ export default function MarketOverviewScreen() {
                         : `¥${aiResult.shopMin.toLocaleString()} 〜 ¥${aiResult.shopMax.toLocaleString()}`
                       : aiResult.shopMin != null ? `¥${aiResult.shopMin.toLocaleString()} 〜`
                       : aiResult.shopMax != null ? `〜 ¥${aiResult.shopMax.toLocaleString()}`
-                      : 'データ不足'}
+                       : '—'}
                   </Text>
-                </View>
-                <View style={[styles.aiTableRow, { borderBottomColor: colors.border }]}>
-                  <Text style={[styles.aiTableCellLeft, { color: colors.mutedForeground }]}>店舗 買取価格帯</Text>
-                  <Text style={[styles.aiTableCellRight, { color: colors.foreground }]}>
-                    {aiResult.buybackMin != null && aiResult.buybackMax != null
-                      ? aiResult.buybackMin === aiResult.buybackMax
-                        ? `¥${aiResult.buybackMin.toLocaleString()}`
-                        : `¥${aiResult.buybackMin.toLocaleString()} 〜 ¥${aiResult.buybackMax.toLocaleString()}`
-                      : aiResult.buybackMin != null ? `¥${aiResult.buybackMin.toLocaleString()} 〜`
-                      : aiResult.buybackMax != null ? `〜 ¥${aiResult.buybackMax.toLocaleString()}`
-                      : 'データ不足'}
-                  </Text>
-                </View>
-                <View style={styles.aiTableRow}>
+                 </View> : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="並品の価格と推定根拠"
+                    accessibilityState={{ expanded: expandedEstimate === 'played' }}
+                    onPress={() => setExpandedEstimate((current) => current === 'played' ? null : 'played')}
+                    style={[styles.estimateRow, { borderBottomColor: colors.border }]}
+                  >
+                    <View style={styles.estimateTop}>
+                      <Text style={[styles.aiTableCellLeft, { color: colors.mutedForeground }]}>
+                        {aiResult.estimates?.ungradedPlayed?.note.includes('Bのみ') ? '並品（B）' : '並品（C〜B）'}
+                      </Text>
+                      <Text style={[styles.estimateValue, { color: aiResult.estimates?.ungradedPlayed?.min != null || aiResult.estimates?.ungradedPlayed?.max != null ? colors.foreground : colors.mutedForeground }]}>
+                        {formatEstimatedPrice(aiResult.estimates?.ungradedPlayed ?? unavailableEstimate)}
+                      </Text>
+                    </View>
+                    {aiResult.estimates?.ungradedPlayed?.note ? (
+                      <Text numberOfLines={expandedEstimate === 'played' ? undefined : 2} style={[styles.estimateNote, { color: colors.mutedForeground }]}>
+                        {aiResult.estimates.ungradedPlayed.note}
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                 {aiResult.psa10Median != null ? <View style={styles.aiTableRow}>
                   <Text style={[styles.aiTableCellLeft, { color: colors.mutedForeground }]}>同カード PSA10 成約</Text>
                   <Text style={[styles.aiTableCellRight, { color: colors.foreground }]}>
-                    {aiResult.psa10Median != null ? `¥${aiResult.psa10Median.toLocaleString()}` : 'データ不足'}
+                     {aiResult.psa10Median != null ? `¥${aiResult.psa10Median.toLocaleString()}` : '—'}
                   </Text>
-                </View>
+                 </View> : null}
               </View>
               {aiResult.searchedAt && (
                 <Text style={{ color: colors.mutedForeground, fontSize: 11 }}>
@@ -335,8 +473,17 @@ export default function MarketOverviewScreen() {
 
               {aiResult.sources && aiResult.sources.length > 0 && (
                 <View style={styles.aiSources}>
-                  <Text style={[styles.aiSourcesHeading, { color: colors.foreground }]}>参照ページ（{aiResult.sources.length}件）</Text>
-                  {aiResult.sources.map((src, i) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`参照ページ${aiResult.sources.length}件を${sourcesExpanded ? '閉じる' : '開く'}`}
+                    accessibilityState={{ expanded: sourcesExpanded }}
+                    onPress={() => setSourcesExpanded((expanded) => !expanded)}
+                    style={[styles.sourcesToggle, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  >
+                    <Text style={[styles.aiSourcesHeading, { color: colors.foreground }]}>参照ページ（{aiResult.sources.length}件）</Text>
+                    <Feather name={sourcesExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
+                  </Pressable>
+                  {sourcesExpanded && aiResult.sources.map((src, i) => (
                     <Pressable
                       key={i}
                       style={({ pressed }) => [
@@ -356,8 +503,12 @@ export default function MarketOverviewScreen() {
                         <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
                           {src.category === 'shop' ? 'ショップ販売'
                             : src.category === 'buyback' ? 'ショップ買取'
-                            : src.category === 'psa10' ? 'PSA10成約'
-                            : '未鑑定成約'}
+                             : src.category === 'psa10' ? 'PSA10成約'
+                             : src.category === 'psa9' ? 'PSA9の価格情報'
+                             : src.category === 'psa10_listing' ? 'PSA10出品中'
+                             : src.category === 'ungraded_listing' ? '未鑑定の出品中'
+                             : src.category === 'reference' ? '参考情報'
+                             : '未鑑定成約'}
                         </Text>
                       </View>
                       {src.price != null && (
@@ -383,32 +534,48 @@ export default function MarketOverviewScreen() {
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
         <View style={styles.auxiliaryContainer}>
-          <Text style={[styles.sectionHeading, { color: colors.foreground }]}>確定履歴データ (別参照)</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="過去の終了・入札ありオークション観測値を見る"
+            accessibilityState={{ expanded: showHistory }}
+            onPress={() => setShowHistory((visible) => !visible)}
+            style={[styles.historyToggle, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Text style={[styles.sectionHeading, { color: colors.foreground, marginTop: 0, width: 'auto', flex: 1, minWidth: 0 }]}>
+              終了・入札ありオークション（美品条件・成約完了は未確認）
+            </Text>
+            <Feather name={showHistory ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} style={{ marginLeft: 8 }} />
+          </Pressable>
+          {showHistory ? (
+          <>
 
           <View style={styles.priceContainer}>
-            <Text style={[styles.priceLabel, { color: colors.mutedForeground }]}>直近{period}日の成約中央値</Text>
-            {hasConfirmedMarketPrice ? (
+            <Text style={[styles.priceLabel, { color: colors.mutedForeground }]}>直近{period}日のYahoo!オークション観測価格中央値</Text>
+            {auctionMedian != null ? (
               <View style={styles.priceValueRow}>
                 <Text style={[styles.priceCurrency, { color: colors.foreground }]}>¥</Text>
-                <Text style={[styles.priceValue, { color: colors.foreground }]}>{confirmedMarketPrice?.toLocaleString()}</Text>
+                <Text style={[styles.priceValue, { color: colors.foreground }]}>{auctionMedian.toLocaleString()}</Text>
               </View>
             ) : (
               <Text style={[styles.priceLabel, { color: error ? colors.destructive : colors.mutedForeground }]}>
                 {!hasIdentity ? '価格の確認にはカード名と番号が必要です'
                   : error ? '価格の取得に失敗しました'
-                  : isLoading ? '価格を確認中...' : '確認できた成約データがありません'}
+                  : isLoading ? '価格を算出中...' : '有効なYahoo!オークション観測価格がありません'}
               </Text>
             )}
+            <Text style={[styles.warningText, { color: colors.mutedForeground }]}>
+              終了・入札ありの観測価格です。落札・取引成立および美品条件は確認されていません。
+            </Text>
             {prices?.summary.shopMedian != null && (
               <Text style={[styles.priceLabel, { color: colors.mutedForeground }]}>
                 店舗販売価格の参考値 ¥{prices.summary.shopMedian.toLocaleString()}（成約価格には含めません）
               </Text>
             )}
-            {hasConfirmedMarketPrice && (
+            {yahooAuctionQuotes.length > 0 && (
               <View style={[styles.trendBadge, { backgroundColor: colors.positiveSoft }]}>
                 <Feather name="trending-up" size={12} color={colors.positive} />
                 <Text style={[styles.trendBadgeText, { color: colors.positive }]}>
-                  確認済み成約 {prices.summary.transactionCount}件
+                  Yahoo!観測価格 {yahooAuctionQuotes.length}件
                 </Text>
               </View>
             )}
@@ -452,22 +619,22 @@ export default function MarketOverviewScreen() {
             <PriceChart points={points} width={chartWidth} strokeColor={colors.primary} />
           ) : (
             <Text style={[styles.warningText, { color: colors.mutedForeground }]}>
-              成約履歴がないため価格推移は表示できません
+              Yahoo!オークション観測価格がないため推移を表示できません
             </Text>
           )}
         </View>
 
         <View style={styles.statsContainer}>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>最高成約</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>最高観測価格</Text>
             <Text style={[styles.statValue, { color: colors.foreground }]}>
-              {prices?.summary.highestPrice != null ? `¥${prices.summary.highestPrice.toLocaleString()}` : 'データなし'}
+              {auctionHighest != null ? `¥${auctionHighest.toLocaleString()}` : 'データなし'}
             </Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>最低成約</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>最低観測価格</Text>
             <Text style={[styles.statValue, { color: colors.foreground }]}>
-              {prices?.summary.lowestPrice != null ? `¥${prices.summary.lowestPrice.toLocaleString()}` : 'データなし'}
+              {auctionLowest != null ? `¥${auctionLowest.toLocaleString()}` : 'データなし'}
             </Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -477,16 +644,26 @@ export default function MarketOverviewScreen() {
             </Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>確認済み成約数</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>有効な観測価格数</Text>
             <Text style={[styles.statValue, { color: colors.foreground }]}>
-              {prices?.summary.transactionCount ?? 0}件
+              {yahooAuctionQuotes.length}件
             </Text>
           </View>
         </View>
+          </>
+          ) : null}
         </View>
       </ScrollView>
     </View>
   );
+}
+
+import PlayfulScreen from '@/variants/playful/screens/market-overview';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function MarketOverviewRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
 }
 
 const styles = StyleSheet.create({
@@ -520,7 +697,7 @@ const styles = StyleSheet.create({
   
   warningBanner: {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: 22,
     borderWidth: 1,
     padding: 14,
     flexDirection: 'row',
@@ -543,7 +720,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 18,
   },
   cardImageWrap: {
     width: 60,
@@ -609,7 +786,7 @@ const styles = StyleSheet.create({
   },
   aiTable: {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: 22,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -618,20 +795,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
   },
   aiTableCellLeft: {
     fontSize: 13,
     fontWeight: '500',
+    flexShrink: 1,
   },
   aiTableCellRight: {
     fontSize: 14,
     fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'right',
   },
+  identityNote: { width: '100%', fontSize: 12, lineHeight: 18 },
+  aiSectionLabel: { fontSize: 12, fontWeight: '700' },
+  estimateRow: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, gap: 5 },
+  estimateTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  estimateNote: { fontSize: 11, lineHeight: 15 },
+  estimateValue: { flexShrink: 1, textAlign: 'right', fontSize: 13, fontWeight: '700' },
   aiExplanation: {
     width: '100%',
-    borderRadius: 12,
+    borderRadius: 18,
     padding: 12,
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -647,6 +833,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
   },
+  sourcesToggle: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 16, borderWidth: 1 },
   aiSourcesHeading: {
     fontSize: 13,
     fontWeight: '700',
@@ -656,7 +843,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 18,
     borderWidth: 1,
     gap: 8,
   },
@@ -670,12 +857,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
+  historyToggle: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderWidth: 1, borderRadius: 18 },
 
   priceContainer: {
     width: '100%',
     alignItems: 'center',
     gap: 6,
-    marginVertical: 4,
+    marginVertical: 8,
   },
   priceLabel: {
     fontSize: 13,
@@ -712,7 +900,7 @@ const styles = StyleSheet.create({
   periodToggle: {
     width: '100%',
     flexDirection: 'row',
-    borderRadius: 14,
+    borderRadius: 18,
     padding: 4,
   },
   periodButton: {
@@ -730,7 +918,7 @@ const styles = StyleSheet.create({
   chartCard: {
     width: '100%',
     borderWidth: 1,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -746,7 +934,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: '45%',
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
     gap: 6,
   },

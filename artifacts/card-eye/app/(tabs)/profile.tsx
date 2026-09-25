@@ -8,6 +8,8 @@ import { useSavedCards } from '@/hooks/SavedCardsContext';
 import { useAuth } from '@/hooks/AuthContext';
 import { useGetSupabaseStatus } from '@workspace/api-client-react';
 import { useState } from 'react';
+import { designTokens } from '@/constants/design-tokens';
+import { DesignVariantControl } from '@/components/DesignVariantControl';
 
 const menuItems = [
   { icon: 'grid' as const, label: '保存したカード', description: 'コレクションを見る', href: '/collection' as const },
@@ -15,7 +17,7 @@ const menuItems = [
   { icon: 'help-circle' as const, label: '使い方とデータについて', description: '保存と推定結果の注意点', href: '/help' as const },
 ];
 
-export default function ProfileScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const { displayName, isLoaded, loadError } = useDeviceProfile();
   const { cards, isLoaded: cardsLoaded, loadError: cardsError } = useSavedCards();
@@ -38,9 +40,11 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
+      <DesignVariantControl />
       <View>
         <Text style={[styles.eyebrow, { color: colors.primary }]}>MY PAGE</Text>
         <Text style={[styles.title, { color: colors.foreground }]}>マイページ</Text>
+        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>あなたのカードブックと設定</Text>
       </View>
 
       <Pressable
@@ -153,21 +157,30 @@ export default function ProfileScreen() {
   );
 }
 
+import PlayfulScreen from '@/variants/playful/screens/(tabs)/profile';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function ProfileRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
+}
+
 const styles = StyleSheet.create({
   eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.6 },
   title: { fontSize: 29, fontWeight: '700', marginTop: 6, letterSpacing: -0.5 },
-  profileCard: { minHeight: 90, borderWidth: 1, borderRadius: 21, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  subtitle: { fontSize: 12, marginTop: 7 },
+  profileCard: { minHeight: 90, borderWidth: 1, borderRadius: designTokens.radius.card, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 12, ...designTokens.shadows.soft },
   avatar: { width: 56, height: 56, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   profileText: { flex: 1, gap: 5 },
-  accountCard: { borderWidth: 1, borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
+  accountCard: { borderWidth: 1, borderRadius: designTokens.radius.medium, padding: 16, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
   accountCopy: { flex: 1, minWidth: 150, gap: 5 },
   accountButton: { minHeight: 42, paddingHorizontal: 14, borderWidth: 1, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   accountButtonText: { fontSize: 12, fontWeight: '700' },
   accountError: { width: '100%', fontSize: 12 },
   userName: { fontSize: 16, fontWeight: '700' },
   caption: { fontSize: 12 },
-  collectionCard: { borderWidth: 1, borderRadius: 18, padding: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  connectionCard: { borderWidth: 1, borderRadius: 15, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  collectionCard: { borderWidth: 1, borderRadius: designTokens.radius.medium, padding: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  connectionCard: { borderWidth: 1, borderRadius: designTokens.radius.small, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   connectionCopy: { flex: 1, gap: 4 },
   connectionTitle: { fontSize: 13, fontWeight: '700' },
   count: { fontSize: 23, fontWeight: '700', marginTop: 7 },

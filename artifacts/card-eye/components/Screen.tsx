@@ -2,19 +2,22 @@ import { ReactNode } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { designTokens } from '@/constants/design-tokens';
 
 type ScreenProps = {
   children: ReactNode;
   scroll?: boolean;
+  compact?: boolean;
 };
 
-export function Screen({ children, scroll = true }: ScreenProps) {
+export function Screen({ children, scroll = true, compact = false }: ScreenProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const contentStyle = [
     styles.content,
+    compact && styles.compactContent,
     {
-      paddingTop: insets.top + 20,
+      paddingTop: insets.top + (compact ? designTokens.spacing.md : designTokens.spacing.xl),
       paddingBottom: Platform.OS === 'web' ? 112 : insets.bottom + 104,
     },
   ];
@@ -41,7 +44,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 20,
-    gap: 22,
+    paddingHorizontal: designTokens.spacing.lg,
+    gap: designTokens.spacing.xl,
+  },
+  compactContent: {
+    gap: 10,
   },
 });

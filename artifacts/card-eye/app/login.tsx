@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Screen } from '@/components/Screen';
+import { designTokens } from '@/constants/design-tokens';
 import { useAuth } from '@/hooks/AuthContext';
 import { useColors } from '@/hooks/useColors';
 
-export default function LoginScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const { session, isLoading, loadError, signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -53,17 +54,34 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior="padding" keyboardVerticalOffset={0}>
       <Screen>
+        <View pointerEvents="none" style={styles.orbit}>
+          <View style={[styles.orbitDot, styles.orbitDotLarge, { backgroundColor: colors.lavender }]} />
+          <View style={[styles.orbitDot, styles.orbitDotSmall, { backgroundColor: colors.mint }]} />
+        </View>
         <View style={styles.header}>
           <Pressable accessibilityRole="button" accessibilityLabel="マイページに戻る" onPress={() => router.replace('/profile')} style={styles.back}>
             <Feather name="arrow-left" size={22} color={colors.foreground} />
           </Pressable>
-          <Text style={[styles.heading, { color: colors.foreground }]}>アカウント</Text>
+          <View>
+            <Text style={[styles.kicker, { color: colors.tint }]}>CARD EYE / MY SHELF</Text>
+            <Text style={[styles.heading, { color: colors.foreground }]}>アカウント</Text>
+          </View>
         </View>
 
         <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.title, { color: colors.foreground }]}>
+          <View style={styles.panelIntro}>
+            <View style={[styles.iconBadge, { backgroundColor: colors.accent }]}>
+              <Feather name="eye" size={19} color={colors.primary} />
+            </View>
+            <View style={styles.introCopy}>
+              <Text style={[styles.title, { color: colors.foreground }]}>
             {mode === 'login' ? 'ログイン' : '新規登録'}
-          </Text>
+              </Text>
+              <Text style={[styles.description, { color: colors.mutedForeground }]}>
+                保存したカードを、いつでも見つけられるように。
+              </Text>
+            </View>
+          </View>
           <Text style={[styles.description, { color: colors.mutedForeground }]}>
             Supabase Auth のアカウントを使用します。保存したカードと表示名はログイン後もこの端末内に残ります。
           </Text>
@@ -151,13 +169,29 @@ export default function LoginScreen() {
   );
 }
 
+import PlayfulScreen from '@/variants/playful/screens/login';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function LoginRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   back: { minWidth: 42, minHeight: 42, justifyContent: 'center' },
-  heading: { fontSize: 22, fontWeight: '700' },
-  panel: { borderWidth: 1, borderRadius: 20, padding: 20, gap: 18 },
-  title: { fontSize: 23, fontWeight: '700' },
+  kicker: { fontSize: 10, fontWeight: '700', letterSpacing: 1.4, marginBottom: 3 },
+  heading: { fontSize: 24, fontWeight: '700', letterSpacing: -0.4 },
+  orbit: { position: 'absolute', top: 24, right: 8, width: 100, height: 80 },
+  orbitDot: { position: 'absolute', borderRadius: 999, opacity: 0.32 },
+  orbitDotLarge: { width: 68, height: 68, right: 0, top: 0 },
+  orbitDotSmall: { width: 18, height: 18, left: 5, bottom: 2 },
+  panel: { borderWidth: 1, borderRadius: designTokens.radius.hero, padding: 20, gap: 18, ...designTokens.shadows.soft },
+  panelIntro: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconBadge: { width: 42, height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  introCopy: { flex: 1, gap: 3 },
+  title: { fontSize: 23, fontWeight: '700', letterSpacing: -0.4 },
   description: { fontSize: 13, lineHeight: 20 },
   field: { gap: 8 },
   label: { fontSize: 13, fontWeight: '700' },

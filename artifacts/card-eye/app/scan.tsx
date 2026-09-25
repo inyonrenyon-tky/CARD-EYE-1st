@@ -51,7 +51,7 @@ function ScanIconButton({
   );
 }
 
-export default function ScanScreen() {
+function ClassicScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { clearScan, setPhotoUri } = useScan();
@@ -369,6 +369,14 @@ export default function ScanScreen() {
   );
 }
 
+import PlayfulScreen from '@/variants/playful/screens/scan';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+
+export default function ScanRoute() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulScreen /> : <ClassicScreen />;
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   centeredScreen: {
@@ -376,21 +384,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
-    gap: 16,
+    gap: 18,
   },
   permissionIcon: {
     width: 72,
     height: 72,
-    borderRadius: 24,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
   },
-  permissionTitle: { fontSize: 22, fontWeight: '700', textAlign: 'center' },
-  permissionBody: { maxWidth: 320, fontSize: 14, lineHeight: 22, textAlign: 'center' },
+  permissionTitle: { fontSize: 22, lineHeight: 29, fontWeight: '700', textAlign: 'center', letterSpacing: -0.3 },
+  permissionBody: { maxWidth: 320, fontSize: 15, lineHeight: 23, textAlign: 'center' },
   primaryAction: {
     minHeight: 52,
-    borderRadius: 16,
+    borderRadius: 20,
     paddingHorizontal: 18,
     flexDirection: 'row',
     alignItems: 'center',
@@ -411,21 +419,21 @@ const styles = StyleSheet.create({
   previewImage: { ...StyleSheet.absoluteFill, width: undefined, height: undefined },
   previewTopBar: {
     minHeight: 68,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  topBarTitle: { fontSize: 16, fontWeight: '700' },
+  topBarTitle: { fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
   topBarSpacer: { width: 42, height: 42 },
-  previewBottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, gap: 14 },
+  previewBottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, gap: 16 },
   previewHint: { fontSize: 12, textAlign: 'center' },
   previewActions: { flexDirection: 'row', gap: 10 },
   secondaryAction: {
     flex: 1,
     minHeight: 52,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -433,10 +441,11 @@ const styles = StyleSheet.create({
   },
   secondaryActionText: { fontSize: 13, fontWeight: '700' },
   iconButton: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 22,
   },
   cameraScreen: { flex: 1 },
   cameraShade: {

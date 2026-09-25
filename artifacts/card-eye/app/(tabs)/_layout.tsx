@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -7,6 +7,9 @@ import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Tabs } from 'expo-router';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { SymbolView } from 'expo-symbols';
+import { designTokens } from '@/constants/design-tokens';
+import { useDesignVariant } from '@/hooks/DesignVariantContext';
+import PlayfulTabLayout from '@/variants/playful/TabLayout';
 
 // IMPORTANT: iOS 26 uses NativeTabs for native tabs with liquid glass support.
 // NativeTabs intentionally does NOT use custom design tokens — liquid glass
@@ -43,10 +46,8 @@ function NativeTabLayout() {
   );
 }
 
-function ClassicTabLayout() {
+function ClassicTabsContent() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
 
@@ -55,20 +56,26 @@ function ClassicTabLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarActiveBackgroundColor: colors.surfaceHighlight,
         headerShown: false,
         tabBarStyle: {
           position: 'absolute',
-          backgroundColor: isIOS ? 'transparent' : colors.background,
-          borderTopWidth: isWeb ? 1 : 0,
+          backgroundColor: isIOS ? 'transparent' : colors.card,
+          borderTopWidth: isWeb ? 1 : StyleSheet.hairlineWidth,
           borderTopColor: colors.border,
           elevation: 0,
+          paddingTop: 6,
+          paddingBottom: 6,
+          ...(isIOS ? { borderTopLeftRadius: designTokens.radius.medium, borderTopRightRadius: designTokens.radius.medium, overflow: 'hidden' } : {}),
           ...(isWeb ? { height: 84 } : {}),
         },
+        tabBarItemStyle: { borderRadius: designTokens.radius.pill, marginHorizontal: 4, marginVertical: 4, overflow: 'hidden' },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarBackground: () =>
           isIOS ? (
             <BlurView
               intensity={100}
-              tint={isDark ? 'dark' : 'light'}
+              tint="dark"
               style={StyleSheet.absoluteFill}
             />
           ) : isWeb ? (
@@ -133,9 +140,14 @@ function ClassicTabLayout() {
   );
 }
 
-export default function TabLayout() {
+function ClassicTabLayout() {
   if (isLiquidGlassAvailable()) {
     return <NativeTabLayout />;
   }
-  return <ClassicTabLayout />;
+  return <ClassicTabsContent />;
+}
+
+export default function TabLayout() {
+  const { variant } = useDesignVariant();
+  return variant === 'playful' ? <PlayfulTabLayout /> : <ClassicTabLayout />;
 }

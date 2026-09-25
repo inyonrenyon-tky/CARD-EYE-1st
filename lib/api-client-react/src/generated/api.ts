@@ -28,9 +28,11 @@ import type {
   CatalogCardResponse,
   ConditionAnalysis,
   ConditionScanInput,
+  DiscoveryCardsResponse,
   FeaturedCardsResponse,
   GetCardPricesParams,
   HealthStatus,
+  ListDiscoverCardsParams,
   MarketAnalysis,
   MarketAnalysisInput,
   SupabaseStatus
@@ -492,7 +494,7 @@ export const getGetFeaturedCardsUrl = () => {
 }
 
 /**
- * @summary Get curated featured cards with confirmed recent sale prices when available
+ * @summary Discover approved-image cards ranked by confirmed recent transactions and scans
  */
 export const getFeaturedCards = async ( options?: Parameters<typeof customFetch>[1]): Promise<FeaturedCardsResponse> => {
 
@@ -539,7 +541,7 @@ export type GetFeaturedCardsQueryError = ErrorType<void>
 
 
 /**
- * @summary Get curated featured cards with confirmed recent sale prices when available
+ * @summary Discover approved-image cards ranked by confirmed recent transactions and scans
  */
 
 export function useGetFeaturedCards<TData = Awaited<ReturnType<typeof getFeaturedCards>>, TError = ErrorType<void>>(
@@ -548,6 +550,90 @@ export function useGetFeaturedCards<TData = Awaited<ReturnType<typeof getFeature
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetFeaturedCardsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListDiscoverCardsUrl = (params?: ListDiscoverCardsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/cards/discover?${stringifiedParams}` : `/api/cards/discover`
+}
+
+/**
+ * @summary Browse actual Japanese catalog cards using recent releases and scan activity
+ */
+export const listDiscoverCards = async (params?: ListDiscoverCardsParams, options?: Parameters<typeof customFetch>[1]): Promise<DiscoveryCardsResponse> => {
+
+  return customFetch<DiscoveryCardsResponse>(getListDiscoverCardsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDiscoverCardsQueryKey = (params?: ListDiscoverCardsParams,) => {
+    return [
+    `/api/cards/discover`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDiscoverCardsQueryOptions = <TData = Awaited<ReturnType<typeof listDiscoverCards>>, TError = ErrorType<void>>(params?: ListDiscoverCardsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiscoverCards>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDiscoverCardsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDiscoverCards>>> = ({ signal }) => listDiscoverCards(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDiscoverCards>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDiscoverCardsQueryResult = NonNullable<Awaited<ReturnType<typeof listDiscoverCards>>>
+export type ListDiscoverCardsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Browse actual Japanese catalog cards using recent releases and scan activity
+ */
+
+export function useListDiscoverCards<TData = Awaited<ReturnType<typeof listDiscoverCards>>, TError = ErrorType<void>>(
+ params?: ListDiscoverCardsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiscoverCards>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDiscoverCardsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -625,6 +711,84 @@ export function useGetCatalogCard<TData = Awaited<ReturnType<typeof getCatalogCa
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCatalogCardQueryOptions(cardId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCatalogCardAiMarketResultUrl = (cardId: string,) => {
+
+
+
+
+  return `/api/cards/catalog/${cardId}/ai-market-result`
+}
+
+/**
+ * Returns current cited market research for the catalog identity. AI estimates are references only and are not stored as confirmed price observations.
+ * @summary Get shared AI market research for a canonical catalog card
+ */
+export const getCatalogCardAiMarketResult = async (cardId: string, options?: Parameters<typeof customFetch>[1]): Promise<AiMarketSearchResponse> => {
+
+  return customFetch<AiMarketSearchResponse>(getGetCatalogCardAiMarketResultUrl(cardId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCatalogCardAiMarketResultQueryKey = (cardId: string,) => {
+    return [
+    `/api/cards/catalog/${cardId}/ai-market-result`
+    ] as const;
+    }
+
+
+export const getGetCatalogCardAiMarketResultQueryOptions = <TData = Awaited<ReturnType<typeof getCatalogCardAiMarketResult>>, TError = ErrorType<void>>(cardId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogCardAiMarketResult>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCatalogCardAiMarketResultQueryKey(cardId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCatalogCardAiMarketResult>>> = ({ signal }) => getCatalogCardAiMarketResult(cardId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: cardId !== null && cardId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCatalogCardAiMarketResult>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCatalogCardAiMarketResultQueryResult = NonNullable<Awaited<ReturnType<typeof getCatalogCardAiMarketResult>>>
+export type GetCatalogCardAiMarketResultQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get shared AI market research for a canonical catalog card
+ */
+
+export function useGetCatalogCardAiMarketResult<TData = Awaited<ReturnType<typeof getCatalogCardAiMarketResult>>, TError = ErrorType<void>>(
+ cardId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogCardAiMarketResult>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCatalogCardAiMarketResultQueryOptions(cardId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

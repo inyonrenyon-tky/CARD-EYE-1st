@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AiMarketEstimates } from './aiMarketEstimates';
+import type { AiMarketSearchResponseDetectedGrade } from './aiMarketSearchResponseDetectedGrade';
 import type { AiMarketSearchSource } from './aiMarketSearchSource';
 
 export interface AiMarketSearchResponse {
@@ -16,11 +18,27 @@ export interface AiMarketSearchResponse {
   /** @nullable */
   rarity: string | null;
   searchedAt: Date;
+  identityNote: string;
+  detectedGrade: AiMarketSearchResponseDetectedGrade;
   /**
+     * AI-estimated reference only; not a confirmed transaction price.
      * @exclusiveMinimum 0
      * @nullable
      */
   marketPrice: number | null;
+  /**
+     * Lower bound from ungradedExcellent (A− to A); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  referenceMin: number | null;
+  /**
+     * Upper bound from ungradedMint (A to S); null unless both ungradedExcellent and ungradedMint have complete, coherent ranges.
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  referenceMax: number | null;
+  estimates: AiMarketEstimates;
   /**
      * @exclusiveMinimum 0
      * @nullable
@@ -42,11 +60,13 @@ export interface AiMarketSearchResponse {
      */
   shopMax: number | null;
   /**
+     * Cited current shop buyback offers explicitly for ungraded A− to S cards only; unavailable if incompatible with shop sale or reference range.
      * @exclusiveMinimum 0
      * @nullable
      */
   buybackMin: number | null;
   /**
+     * Upper bound of qualifying buybacks; never higher than a displayed shop selling minimum.
      * @exclusiveMinimum 0
      * @nullable
      */

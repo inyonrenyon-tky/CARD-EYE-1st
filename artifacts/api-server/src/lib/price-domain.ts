@@ -1,3 +1,5 @@
+import { calculateRepresentativePrice } from "./representative-price";
+
 export const PERIODS = [7, 30, 90, 365] as const;
 export type PeriodDays = (typeof PERIODS)[number];
 export type PriceMode = "demo" | "live";
@@ -28,25 +30,27 @@ export type PriceObservation = {
   condition: string | null;
   graded: false;
   grade: null;
-  saleStatus: "sold" | "listing" | "buyback";
+  saleStatus: "sold" | "auction_closed" | "listing" | "buyback";
 };
 export type MarketPriceBasis = "confirmed_ungraded_sales" | "shop_listing_reference" | null;
 export type MarketPriceConfidence = "high" | "medium" | "low" | "insufficient";
 
 export function summarizeMarketPrice(sales: PriceObservation[], listings: PriceObservation[]) {
-  const transactionMedian = median(sales.map((item) => item.price));
-  const shopMedian = median(listings.map((item) => item.price));
+  const confirmedSales = sales.filter((item) => item.saleStatus === "sold");
+  const actualListings = listings.filter((item) => item.saleStatus === "listing");
+  const transactionMedian = median(confirmedSales.map((item) => item.price));
+  const shopMedian = median(actualListings.map((item) => item.price));
   let marketPrice: number | null = null;
   let marketPriceBasis: MarketPriceBasis = null;
   let marketPriceConfidence: MarketPriceConfidence = "insufficient";
 
-  if (sales.length >= 3) {
+  if (confirmedSales.length >= 3) {
     marketPrice = transactionMedian;
     marketPriceBasis = "confirmed_ungraded_sales";
-    const saleSources = new Set(sales.map((item) => item.source));
-    marketPriceConfidence = sales.length >= 20 && saleSources.size >= 2
+    const saleSources = new Set(confirmedSales.map((item) => item.source));
+    marketPriceConfidence = confirmedSales.length >= 20 && saleSources.size >= 2
       ? "high"
-      : sales.length >= 10 ? "medium" : "low";
+      : confirmedSales.length >= 10 ? "medium" : "low";
   } else if (shopMedian !== null) {
     marketPrice = shopMedian;
     marketPriceBasis = "shop_listing_reference";
@@ -119,6 +123,7 @@ export function getCardPrices(cardId: string, periodDays: PeriodDays, mode: Pric
   if (mode === "live") {
     return {
       cardId, currency: "JPY" as const, mode, periodDays, marketPrice: null, reference: null,
+      representative: calculateRepresentativePrice([], new Date().toISOString()),
       marketPriceConfidence: "insufficient" as const, marketPriceBasis: null,
       observations: [] as PriceObservation[],
       summary: { transactionMedian: null, shopMedian: null, buybackMedian: null, psa10Median: null, transactionCount: 0, confidenceScore: null, highestPrice: null, lowestPrice: null, changePercent: null },
@@ -175,6 +180,7 @@ export function getCardPrices(cardId: string, periodDays: PeriodDays, mode: Pric
     marketPrice: marketSummary.marketPrice,
     marketPriceConfidence: marketSummary.marketPriceConfidence,
     marketPriceBasis: marketSummary.marketPriceBasis,
+    representative: calculateRepresentativePrice([], now),
     observations,
     reference: { source: "cardrush", price: 15800 },
     summary: {

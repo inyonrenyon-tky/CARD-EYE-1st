@@ -14,4 +14,17 @@ demo?: boolean;
  * @maxLength 100
  */
 name?: string;
+/**
+ * Exact provider-visible set code required for representative pricing.
+ * @minLength 1
+ * @maxLength 40
+ * @pattern ^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$
+ */
+series?: string;
+/**
+ * Printed rarity or variant, used to identify cards without a confirmed printed number.
+ * @minLength 1
+ * @maxLength 80
+ */
+rarity?: string;
 };
