@@ -20,6 +20,41 @@ export type PriceTransactionSummary = {
   transactionCount: number; highestPrice: number | null; lowestPrice: number | null;
   lastUpdated: string | null; history: Array<{ date: string; price: number }>;
 };
+export type PriceObservation = {
+  source: string;
+  sourceType: "SHOP" | "MARKETPLACE";
+  observedAt: string;
+  price: number;
+  condition: string | null;
+  graded: false;
+  grade: null;
+  saleStatus: "sold" | "listing" | "buyback";
+};
+export type MarketPriceBasis = "confirmed_ungraded_sales" | "shop_listing_reference" | null;
+export type MarketPriceConfidence = "high" | "medium" | "low" | "insufficient";
+
+export function summarizeMarketPrice(sales: PriceObservation[], listings: PriceObservation[]) {
+  const transactionMedian = median(sales.map((item) => item.price));
+  const shopMedian = median(listings.map((item) => item.price));
+  let marketPrice: number | null = null;
+  let marketPriceBasis: MarketPriceBasis = null;
+  let marketPriceConfidence: MarketPriceConfidence = "insufficient";
+
+  if (sales.length >= 3) {
+    marketPrice = transactionMedian;
+    marketPriceBasis = "confirmed_ungraded_sales";
+    const saleSources = new Set(sales.map((item) => item.source));
+    marketPriceConfidence = sales.length >= 20 && saleSources.size >= 2
+      ? "high"
+      : sales.length >= 10 ? "medium" : "low";
+  } else if (shopMedian !== null) {
+    marketPrice = shopMedian;
+    marketPriceBasis = "shop_listing_reference";
+    marketPriceConfidence = "low";
+  }
+
+  return { marketPrice, marketPriceBasis, marketPriceConfidence, transactionMedian, shopMedian };
+}
 
 export const sourceConfigs: PriceSourceConfig[] = [
   { source: "cardrush", displayName: "カードラッシュ", type: "SHOP", capabilities: ["LISTING", "BUYBACK"] },
@@ -84,7 +119,9 @@ export function getCardPrices(cardId: string, periodDays: PeriodDays, mode: Pric
   if (mode === "live") {
     return {
       cardId, currency: "JPY" as const, mode, periodDays, marketPrice: null, reference: null,
-      summary: { transactionMedian: null, shopMedian: null, buybackMedian: null, transactionCount: 0, confidenceScore: null, highestPrice: null, lowestPrice: null, changePercent: null },
+      marketPriceConfidence: "insufficient" as const, marketPriceBasis: null,
+      observations: [] as PriceObservation[],
+      summary: { transactionMedian: null, shopMedian: null, buybackMedian: null, psa10Median: null, transactionCount: 0, confidenceScore: null, highestPrice: null, lowestPrice: null, changePercent: null },
       sources: { sales: [] as PriceListing[], transactions: [] as PriceTransactionSummary[], buybacks: [] as PriceBuyback[] },
       sourceConfigs, methodology: "Live provider integrations are not configured; no prices are available.",
     };
@@ -119,18 +156,35 @@ export function getCardPrices(cardId: string, periodDays: PeriodDays, mode: Pric
     ? round(((latestMedian - earlierMedian) / earlierMedian) * 1000) / 10
     : null;
   const transactionMedian = median(allPrices);
+  const observations: PriceObservation[] = [
+    ...sales.map((item) => ({
+      source: item.source, sourceType: "SHOP" as const, observedAt: item.lastUpdated, price: item.price,
+      condition: item.condition, graded: false as const, grade: null, saleStatus: "listing" as const,
+    })),
+    ...cutoff.map((item) => ({
+      source: item.source, sourceType: "MARKETPLACE" as const, observedAt: isoDaysAgo(item.daysAgo), price: item.price,
+      condition: null, graded: false as const, grade: null, saleStatus: "sold" as const,
+    })),
+  ];
+  const marketSummary = summarizeMarketPrice(
+    observations.filter((item) => item.saleStatus === "sold"),
+    observations.filter((item) => item.saleStatus === "listing"),
+  );
   return {
     cardId, currency: "JPY" as const, mode, periodDays,
-    marketPrice: transactionMedian,
+    marketPrice: marketSummary.marketPrice,
+    marketPriceConfidence: marketSummary.marketPriceConfidence,
+    marketPriceBasis: marketSummary.marketPriceBasis,
+    observations,
     reference: { source: "cardrush", price: 15800 },
     summary: {
-      transactionMedian, shopMedian: median(sales.map((item) => item.price)),
+      transactionMedian, shopMedian: median(sales.map((item) => item.price)), psa10Median: null,
       buybackMedian: median(buybacks.map((item) => item.price)), transactionCount: allPrices.length,
       confidenceScore: allPrices.length ? Math.min(95, 60 + Math.min(35, allPrices.length)) : null,
       highestPrice: allPrices.length ? Math.max(...allPrices) : null, lowestPrice: allPrices.length ? Math.min(...allPrices) : null,
       changePercent,
     },
     sources: { sales, transactions, buybacks }, sourceConfigs,
-    methodology: "DEMO MOCK DATA: confirmed individual sale fixtures only; market median merges every sale (not site medians). Confidence is a clearly labeled demo heuristic.",
+    methodology: "DEMO ONLY — ALL PRICES AND OBSERVATIONS ARE SYNTHETIC FIXTURES, NOT LIVE PROVIDER DATA. Demonstrates separate listing and sale categories; market median pools demo individual sale fixtures. Confidence is illustrative only.",
   };
 }

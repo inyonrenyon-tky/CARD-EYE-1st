@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { CardArtwork } from '@/components/CardArtwork';
+import { CardThumbnail } from '@/components/CardThumbnail';
 import { Screen } from '@/components/Screen';
 import { useColors } from '@/hooks/useColors';
 import { useSavedCards } from '@/hooks/SavedCardsContext';
@@ -67,7 +67,16 @@ export default function CollectionScreen() {
               onPress={() => router.push({ pathname: '/card/[id]', params: { id: card.id } })}
               style={({ pressed }) => [{ width: '31.5%', opacity: pressed ? 0.75 : 1 }]}
             >
-              <CardArtwork card={{ name: card.name, number: card.number, tone: 'blue' }} />
+              <CardThumbnail
+                card={{
+                  name: card.name,
+                  series: card.series,
+                  number: card.number,
+                  rarity: card.rarity,
+                  cardId: card.catalogCardId,
+                }}
+                tone="blue"
+              />
               <Text numberOfLines={1} style={[styles.cardName, { color: colors.foreground }]}>
                 {card.name}
               </Text>

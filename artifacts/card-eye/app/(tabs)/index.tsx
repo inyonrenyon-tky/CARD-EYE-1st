@@ -1,13 +1,43 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { CardArtwork } from '@/components/CardArtwork';
+import { useQuery } from '@tanstack/react-query';
+import { customFetch } from '@workspace/api-client-react';
+import { CardThumbnail } from '@/components/CardThumbnail';
 import { Screen } from '@/components/Screen';
-import { recentScans } from '@/constants/mock-data';
 import { useColors } from '@/hooks/useColors';
+
+type FeaturedCard = {
+  id: string;
+  name: string;
+  number: string;
+  series: string;
+  rarity: string;
+  imageUrl: string;
+  marketPrice: number | null;
+  marketPriceBasis: 'confirmed_ungraded_sales' | null;
+  transactionCount: number;
+};
+
+function isUsableFeaturedCard(card: FeaturedCard): boolean {
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(card.id)) return false;
+  try {
+    const imageUrl = new URL(card.imageUrl);
+    return imageUrl.protocol === 'https:' && !imageUrl.username && !imageUrl.password;
+  } catch {
+    return false;
+  }
+}
 
 export default function HomeScreen() {
   const colors = useColors();
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['featured-cards'],
+    queryFn: () => customFetch<{ cards: FeaturedCard[] }>('/api/cards/featured'),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const featuredCards = (data?.cards ?? []).filter(isUsableFeaturedCard);
 
   return (
     <Screen>
@@ -54,23 +84,29 @@ export default function HomeScreen() {
 
       <View style={styles.sectionHeader}>
         <View>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>サンプルカード</Text>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>いま注目のカード</Text>
           <Text style={[styles.sectionCaption, { color: colors.mutedForeground }]}>
-            カード情報はサンプルです。価格は詳細画面で実データの有無を確認できます
+            代表画像を確認済み。価格は確認できた成約のみ表示します
           </Text>
         </View>
-        <Pressable accessibilityRole="button" testID="see-all-scans-button">
-          <Text style={[styles.seeAll, { color: colors.primary }]}>すべて見る</Text>
-        </Pressable>
       </View>
 
-      <View style={styles.scanList}>
-        {recentScans.map((card) => (
+      {isLoading ? (
+        <Text style={[styles.emptyMessage, { color: colors.mutedForeground }]}>カードを読み込み中...</Text>
+      ) : error ? (
+        <Pressable accessibilityRole="button" onPress={() => void refetch()}>
+          <Text style={[styles.emptyMessage, { color: colors.destructive }]}>注目カードを取得できませんでした。タップして再試行</Text>
+        </Pressable>
+      ) : featuredCards.length === 0 ? (
+        <Text style={[styles.emptyMessage, { color: colors.mutedForeground }]}>現在表示できる注目カードはありません。</Text>
+      ) : (
+        <View style={styles.scanList}>
+          {featuredCards.map((card) => (
           <Pressable
             key={card.id}
             accessibilityRole="button"
             accessibilityLabel={`${card.name}の詳細`}
-            testID={`recent-scan-${card.id}`}
+            testID={`featured-card-${card.id}`}
             onPress={() =>
               router.push({ pathname: '/card/[id]', params: { id: card.id } })
             }
@@ -80,7 +116,17 @@ export default function HomeScreen() {
             ]}
           >
             <View style={styles.thumb}>
-              <CardArtwork card={card} compact />
+              <CardThumbnail
+                card={{
+                  name: card.name,
+                  number: card.number,
+                  rarity: card.rarity,
+                  series: card.series,
+                  cardId: card.id,
+                }}
+                imageUrl={card.imageUrl}
+                compact
+              />
             </View>
             <View style={styles.scanInfo}>
               <View style={styles.scanTitleRow}>
@@ -93,14 +139,28 @@ export default function HomeScreen() {
                 {card.number}
               </Text>
               <View style={styles.scanMeta}>
-                <Text style={[styles.price, { color: colors.mutedForeground }]}>価格は詳細で確認</Text>
-                <Text style={[styles.time, { color: colors.mutedForeground }]}>デモ</Text>
+                {card.marketPrice != null
+                  && card.marketPriceBasis === 'confirmed_ungraded_sales'
+                  && card.transactionCount >= 3 ? (
+                  <Text style={[styles.price, { color: colors.foreground }]}>
+                    市場価格 約{card.marketPrice.toLocaleString('ja-JP')}円
+                  </Text>
+                ) : (
+                  <Text style={[styles.price, { color: colors.mutedForeground }]}>市場価格 データなし</Text>
+                )}
+                {card.marketPrice == null ? (
+                  <Text style={[styles.time, { color: colors.mutedForeground }]}>成約データ不足</Text>
+                ) : null}
               </View>
             </View>
             <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
           </Pressable>
-        ))}
-      </View>
+          ))}
+        </View>
+      )}
+      <Text style={[styles.priceCaption, { color: colors.mutedForeground }]}>
+        価格は直近90日間の未鑑定品の確認済み成約が3件以上ある場合のみ表示。販売中の出品価格は含みません。
+      </Text>
     </Screen>
   );
 }
@@ -167,4 +227,6 @@ const styles = StyleSheet.create({
   scanMeta: { flexDirection: 'row', alignItems: 'baseline', gap: 9, marginTop: 4 },
   price: { fontSize: 14, fontWeight: '700' },
   time: { fontSize: 10 },
+  emptyMessage: { fontSize: 13, lineHeight: 20, paddingVertical: 12 },
+  priceCaption: { fontSize: 10, lineHeight: 16 },
 });

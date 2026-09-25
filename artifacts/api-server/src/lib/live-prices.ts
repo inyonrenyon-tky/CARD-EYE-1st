@@ -1,9 +1,9 @@
 import {
-  aggregateConfirmedSales, median, sourceConfigs,
-  type ConfirmedSale, type PeriodDays, type PriceListing, type PriceTransactionSummary,
+  aggregateConfirmedSales, median, sourceConfigs, summarizeMarketPrice,
+  type ConfirmedSale, type PeriodDays, type PriceListing, type PriceObservation, type PriceTransactionSummary,
 } from "./price-domain";
 
-type DatedSale = ConfirmedSale & { date: string };
+type DatedSale = ConfirmedSale & { date: string; title: string };
 type Observations = {
   listing: PriceListing | null; yahooSales: DatedSale[];
   shopReachable: boolean; auctionReachable: boolean;
@@ -24,6 +24,30 @@ function matchesCard(title: string, number: string, name: string) {
   const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`).test(text)
     && text.includes(normalize(name)) && rawCard(title);
+}
+
+export function dedupeDatedSales(items: DatedSale[]): DatedSale[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${normalize(item.title)}|${item.price}|${item.date}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function serializeLiveSaleObservation(sale: DatedSale): PriceObservation {
+  return {
+    source: sale.source, sourceType: "MARKETPLACE", observedAt: sale.date, price: sale.price,
+    condition: null, graded: false, grade: null, saleStatus: "sold",
+  };
+}
+
+export function serializeLiveListingObservation(listing: PriceListing): PriceObservation {
+  return {
+    source: listing.source, sourceType: "SHOP", observedAt: listing.lastUpdated, price: listing.price,
+    condition: listing.condition, graded: false, grade: null, saleStatus: "listing",
+  };
 }
 
 async function fetchPage(url: string) {
@@ -83,14 +107,19 @@ async function readYahoo(number: string, name: string): Promise<DatedSale[]> {
   const items = data.props?.pageProps?.initialState?.search?.items?.listing?.items;
   if (!Array.isArray(items)) throw new Error("Auction result data missing");
   const now = Date.now();
-  return items.flatMap((item): DatedSale[] => {
+  const sales = items.flatMap((item): DatedSale[] => {
     if (item.isFleamarketItem !== false || !item.title || !matchesCard(item.title, number, name)
-      || !item.bidCount || item.bidCount < 1 || !Number.isFinite(item.price) || (item.price ?? 0) <= 0
+      || !Number.isInteger(item.bidCount) || (item.bidCount ?? 0) < 1
+      || !Number.isSafeInteger(item.price) || (item.price ?? 0) <= 0
       || !item.endTime) return [];
     const end = Date.parse(item.endTime);
     if (!Number.isFinite(end) || end > now) return [];
-    return [{ source: "yahoo_auction", price: item.price!, daysAgo: (now - end) / 86_400_000, date: new Date(end).toISOString(), priceType: "SALE" }];
+    return [{
+      source: "yahoo_auction", price: item.price!, daysAgo: (now - end) / 86_400_000,
+      date: new Date(end).toISOString(), title: item.title, priceType: "SALE",
+    }];
   });
+  return dedupeDatedSales(sales);
 }
 
 async function observations(number: string, name: string): Promise<Observations> {
@@ -111,15 +140,31 @@ async function observations(number: string, name: string): Promise<Observations>
   return promise;
 }
 
-export async function getLiveCardPrices(cardId: string, name: string | undefined, periodDays: PeriodDays) {
+export async function getLiveCardPrices(
+  cardId: string,
+  name: string | undefined,
+  periodDays: PeriodDays,
+  trustedCatalogIdentity = false,
+) {
   const cardName = name?.trim();
-  const hasIdentity = !!cardName && cardName.length <= 100 && /^\d{1,4}\/[\w-]{2,25}$/i.test(cardId);
+  const validNumber = trustedCatalogIdentity
+    ? /^[\w-]{1,24}\/[\w-]{2,25}$/i.test(cardId)
+    : /^\d{1,4}\/[\w-]{2,25}$/i.test(cardId);
+  const hasIdentity = !!cardName && cardName.length <= 100 && validNumber;
   const found = hasIdentity ? await observations(cardId, cardName!) : null;
   const sales = found?.listing ? [found.listing] : [];
   const withinPeriod = (found?.yahooSales ?? []).filter((sale) => sale.daysAgo >= 0 && sale.daysAgo < periodDays);
   const filtered = aggregateConfirmedSales(withinPeriod, periodDays) as DatedSale[];
   const values = filtered.map((sale) => sale.price);
   const transactionMedian = median(values);
+  const priceObservations: PriceObservation[] = [
+    ...filtered.map(serializeLiveSaleObservation),
+    ...(found?.listing ? [serializeLiveListingObservation(found.listing)] : []),
+  ];
+  const marketSummary = summarizeMarketPrice(
+    priceObservations.filter((item) => item.saleStatus === "sold"),
+    priceObservations.filter((item) => item.saleStatus === "listing"),
+  );
   const byDate = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
   const transaction: PriceTransactionSummary[] = values.length ? [{
     source: "yahoo_auction", displayName: "Yahoo!オークション", priceType: "SALE",
@@ -148,10 +193,14 @@ export async function getLiveCardPrices(cardId: string, name: string | undefined
   ];
   return {
     cardId, currency: "JPY" as const, mode: "live" as const, periodDays,
-    marketPrice: transactionMedian,
+    marketPrice: marketSummary.marketPrice,
+    marketPriceConfidence: marketSummary.marketPriceConfidence,
+    marketPriceBasis: marketSummary.marketPriceBasis,
+    observations: priceObservations,
     reference: sales.length ? { source: "hareruya2", price: sales[0].price } : null,
     summary: {
       transactionMedian, shopMedian: median(sales.map((item) => item.price)), buybackMedian: null,
+      psa10Median: null,
       transactionCount: values.length, confidenceScore: null,
       highestPrice: values.length ? Math.max(...values) : null,
       lowestPrice: values.length ? Math.min(...values) : null, changePercent,
@@ -161,6 +210,6 @@ export async function getLiveCardPrices(cardId: string, name: string | undefined
     sourceAvailability,
     methodology: !hasIdentity
       ? "実価格の照合にはカード名と「番号/セット番号」が必要です。"
-      : `対象: ${cardName} ${cardId}。成約中央値はYahoo!オークションの終了済み・入札あり・単品の検索結果（直近最大50件）から算出。全成約を網羅した価格ではありません。晴れる屋2は現在の単品販売価格（取得時刻）で、成約中央値に含みません。カードラッシュ・メルカリ・SNKRDUNKは確認済みの価格データ連携がなく集計対象外。`,
+      : `対象: ${cardName} ${cardId}。成約中央値はYahoo!オークションの終了済み・入札あり・単品の一致結果（検索結果の先頭最大50件、period=${periodDays}日以内）から重複・極端な外れ値を除いて算出し、晴れる屋2の在庫あり単品販売価格とは別集計です。Yahoo!結果窓の全成約を網羅した価格ではなく、商品状態は確認できないためcondition=null・未鑑定のみをタイトルから除外確認しています。PSA10・買取価格は取得していません。カードラッシュ・メルカリ・SNKRDUNKの価格データ連携はなく集計対象外。`,
   };
 }

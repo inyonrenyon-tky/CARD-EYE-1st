@@ -21,7 +21,11 @@ export const normalizeText = (s: string) => s.normalize("NFKC").toLowerCase().re
 export const normalizeNumber = (s: string) => s.normalize("NFKC").split("/")[0].replace(/\s/g, "").toUpperCase();
 function normalizeRarity(s: string) {
   const value = normalizeText(s);
-  return ({ sar: "specialillustrationrare", ar: "illustrationrare" } as Record<string, string>)[value] ?? value;
+  return ({
+    sar: "specialillustrationrare",
+    ar: "illustrationrare",
+    rr: "doublerare",
+  } as Record<string, string>)[value] ?? value;
 }
 
 function editDistance(a: string, b: string): number {

@@ -3,23 +3,37 @@ import type { CardAnalysis } from '@workspace/api-client-react';
 
 type ScanState = {
   uri?: string;
+  scanId?: string;
   analysis: CardAnalysis | null;
-  setScan: (scan: { uri?: string; analysis: CardAnalysis }) => void;
+  setPhotoUri: (uri: string) => void;
+  setScan: (analysis: CardAnalysis) => void;
   clearScan: () => void;
 };
 
 const ScanContext = createContext<ScanState | null>(null);
 
 export function ScanProvider({ children }: { children: ReactNode }) {
-  const [scan, setScanState] = useState<{ uri?: string; analysis: CardAnalysis } | null>(null);
+  const [uri, setUri] = useState<string>();
+  const [scanId, setScanId] = useState<string>();
+  const [analysis, setAnalysis] = useState<CardAnalysis | null>(null);
   const value = useMemo<ScanState>(
     () => ({
-      uri: scan?.uri,
-      analysis: scan?.analysis ?? null,
-      setScan: setScanState,
-      clearScan: () => setScanState(null),
+      uri,
+      scanId,
+      analysis,
+      setPhotoUri: (photoUri) => {
+        setUri(photoUri);
+        setScanId(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        setAnalysis(null);
+      },
+      setScan: setAnalysis,
+      clearScan: () => {
+        setUri(undefined);
+        setScanId(undefined);
+        setAnalysis(null);
+      },
     }),
-    [scan],
+    [uri, scanId, analysis],
   );
   return <ScanContext.Provider value={value}>{children}</ScanContext.Provider>;
 }

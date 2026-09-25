@@ -3,12 +3,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CardArtwork } from '@/components/CardArtwork';
+import { CardThumbnail } from '@/components/CardThumbnail';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
 import { useScan } from '@/hooks/ScanContext';
 import { useSavedCards } from '@/hooks/SavedCardsContext';
-import { readPhoto } from '@/lib/readPhoto';
+import { PhotoReadError, readPhoto } from '@/lib/readPhoto';
 import { useAnalyzeCondition, type ConditionAnalysis } from '@workspace/api-client-react';
 
 type IconName =
@@ -19,7 +19,8 @@ type IconName =
   | 'droplet'
   | 'edit-2';
 
-type ItemKey = 'surface' | 'corners' | 'edges' | 'whitening' | 'centering' | 'scratches';
+type ItemKey = 'surface' | 'corners' | 'edges' | 'whitening' | 'centering' | 'scratches'
+  | 'dents' | 'creases' | 'peeling' | 'water_damage';
 type Evaluation = {
   key: ItemKey;
   label: string;
@@ -28,6 +29,7 @@ type Evaluation = {
   status: ConditionAnalysis['surface']['status'];
   detail: string;
   confidence: number;
+  count?: ConditionAnalysis['surface']['count'];
 };
 
 const evaluationMeta: Array<{ key: ItemKey; label: string; icon: IconName }> = [
@@ -37,6 +39,10 @@ const evaluationMeta: Array<{ key: ItemKey; label: string; icon: IconName }> = [
   { key: 'whitening', label: '白かけ', icon: 'droplet' },
   { key: 'centering', label: 'センタリング', icon: 'maximize' },
   { key: 'scratches', label: '傷', icon: 'edit-2' },
+  { key: 'dents', label: 'へこみ', icon: 'maximize' },
+  { key: 'creases', label: '折れ・しわ', icon: 'corner-up-left' },
+  { key: 'peeling', label: 'はがれ', icon: 'edit-2' },
+  { key: 'water_damage', label: '水濡れ', icon: 'droplet' },
 ];
 const statusLabels: Record<Evaluation['status'], string> = {
   good: '目立つ問題は確認できません',
@@ -51,24 +57,43 @@ const qualityLabels: Record<ConditionAnalysis['imageQuality'], string> = {
   limited: '一部の判定が困難',
   unusable: 'この画像では判定困難',
 };
+const countLabels: Record<ConditionAnalysis['surface']['count'], string> = {
+  none: '所見数：なし',
+  one: '所見数：1件',
+  few: '所見数：少数',
+  many: '所見数：複数',
+  unknown: '所見数：不明',
+};
 
 function buildEvaluations(condition: ConditionAnalysis): Evaluation[] {
-  return evaluationMeta.map((item) => ({
-    ...item,
-    value: statusLabels[condition[item.key].status],
-    status: condition[item.key].status,
-    detail: condition[item.key].note,
-    confidence: condition[item.key].confidence,
-  }));
+  const report = condition as unknown as Record<string, ConditionAnalysis['surface'] | undefined>;
+  return evaluationMeta.flatMap((item): Evaluation[] => {
+    const finding = report[item.key];
+    if (!finding || !statusLabels[finding.status] ||
+        typeof finding.note !== 'string' || !Number.isFinite(finding.confidence)) return [];
+    return [{
+      ...item,
+      value: statusLabels[finding.status],
+      status: finding.status,
+      detail: finding.note,
+      confidence: finding.confidence,
+      count: finding.count,
+    }];
+  });
+}
+
+function rankLabel(rank: ConditionAnalysis['overall_rank']): string {
+  return rank === 'unassessable' ? '評価できません' : rank;
 }
 export default function ConditionCheckScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { analysis: savedAnalysis, uri: scanUri } = useScan();
+  const { analysis: savedAnalysis, uri: scanUri, scanId: activeScanId } = useScan();
   const { saveCard, isLoaded, loadError: storageError } = useSavedCards();
-  const { uri, cardName, cardNumber, rarity } = useLocalSearchParams<{
-    uri?: string;
+  const { scanId: routeScanId, cardName, series, cardNumber, rarity } = useLocalSearchParams<{
+    scanId?: string;
     cardName?: string;
+    series?: string;
     cardNumber?: string;
     rarity?: string;
   }>();
@@ -80,9 +105,14 @@ export default function ConditionCheckScreen() {
   const requestId = useRef(0);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const analysis = scanUri && (!uri || uri === scanUri) ? savedAnalysis : null;
-  const displayUri = uri || scanUri;
+  const isCurrentScan = !!routeScanId && routeScanId === activeScanId;
+  const analysis = isCurrentScan ? savedAnalysis : null;
+  const displayUri = isCurrentScan ? scanUri : undefined;
   const evaluations = condition ? buildEvaluations(condition) : [];
+  const hasRank = !!condition
+    && ['S', 'A', 'A-', 'B', 'C', 'D', 'unassessable'].includes(condition.overall_rank)
+    && typeof condition.rank_reason === 'string'
+    && Number.isFinite(condition.rank_confidence);
   const name = (cardName || analysis?.cardName || '').trim();
   const number = (cardNumber || analysis?.cardNumber || '').trim();
   const canSave = isLoaded && !storageError && !!name && !!number && !isSaving
@@ -99,9 +129,9 @@ export default function ConditionCheckScreen() {
       if (currentId === requestId.current) setCondition(result);
     } catch (error) {
       if (currentId === requestId.current) {
-        setConditionError(error instanceof Error && /HEIC|5MB|画像を読み込めませんでした/.test(error.message)
+        setConditionError(error instanceof PhotoReadError
           ? error.message
-          : '状態を解析できませんでした。通信状態や写真を確認し、再試行してください。');
+          : 'サーバーで状態を解析できませんでした。通信状態を確認し、再試行してください。');
       }
     } finally {
       if (currentId === requestId.current) setIsAnalyzing(false);
@@ -177,7 +207,16 @@ export default function ConditionCheckScreen() {
           {displayUri ? (
             <Image source={{ uri: displayUri }} resizeMode="contain" style={styles.image} />
           ) : (
-            <CardArtwork card={{ name: cardName || 'カード情報未確認', number: cardNumber || '番号未確認', tone: 'orange' }} />
+            <CardThumbnail
+              card={{
+                name: cardName ?? analysis?.cardName ?? 'カード情報未確認',
+                number: cardNumber ?? analysis?.cardNumber ?? '',
+                series: series ?? analysis?.series ?? '',
+                rarity: rarity ?? analysis?.rarity ?? '',
+                cardId: analysis?.catalogMatch?.matchedCardId ?? null,
+              }}
+              compact
+            />
           )}
         </View>
 
@@ -213,6 +252,69 @@ export default function ConditionCheckScreen() {
             ) : null}
           </View>
         ) : null}
+        {condition && !hasRank ? (
+          <View style={[styles.overallCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.description, { color: colors.mutedForeground }]}>
+              この解析結果には状態ランクが含まれていません。もう一度解析してください。
+            </Text>
+            {displayUri ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void runCondition(displayUri)}
+                style={[styles.inlineButton, { backgroundColor: colors.secondary }]}
+              >
+                <Text style={{ color: colors.foreground }}>もう一度解析する</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+        {condition && hasRank ? (
+          <View
+            testID="condition-overall-rank"
+            accessibilityLabel={`CARD EYE状態ランク ${rankLabel(condition.overall_rank)}`}
+            style={[
+              styles.rankCard,
+              {
+                backgroundColor: condition.overall_rank === 'unassessable' ? colors.warningSoft : colors.card,
+                borderColor: condition.overall_rank === 'unassessable' ? colors.warning : colors.primary,
+              },
+            ]}
+          >
+            <View style={styles.rankHeader}>
+              <View style={styles.rankCopy}>
+                <Text style={[styles.rankTitle, { color: colors.foreground }]}>CARD EYE状態ランク</Text>
+                <Text style={[styles.rankValue, { color: condition.overall_rank === 'unassessable' ? colors.warning : colors.primary }]}>
+                  {rankLabel(condition.overall_rank)}
+                </Text>
+              </View>
+              <View style={[styles.aiPill, { backgroundColor: colors.accent }]}>
+                <Text style={[styles.aiPillText, { color: colors.primary }]}>独自評価</Text>
+              </View>
+            </View>
+            <Text style={[styles.rankReason, { color: colors.foreground }]}>{condition.rank_reason}</Text>
+            <Text style={[styles.qualityDetail, { color: colors.mutedForeground }]}>
+              ランク判定の確信度 {Math.round(condition.rank_confidence * 100)}%
+            </Text>
+            {condition.overall_rank === 'unassessable' ? (
+              <>
+                <Text style={[styles.rankGuidance, { color: colors.warning }]}>
+                  ランクを確認するには、明るい場所でカード全体にピントを合わせて撮り直してください。
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="ランク判定のために写真を撮り直す"
+                  testID="condition-rank-retake-button"
+                  onPress={() => router.replace('/scan')}
+                  style={[styles.inlineButton, { backgroundColor: colors.warningSoft }]}
+                >
+                  <Feather name="camera" size={16} color={colors.warning} />
+                  <Text style={{ color: colors.foreground }}>撮影し直す</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+        ) : null}
+
         {condition ? (
           <View style={[styles.overallCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.overallHeader}>
@@ -259,7 +361,7 @@ export default function ConditionCheckScreen() {
           <>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>画像からの観察結果</Text>
-              <Text style={[styles.sectionCaption, { color: colors.mutedForeground }]}>6項目</Text>
+              <Text style={[styles.sectionCaption, { color: colors.mutedForeground }]}>{evaluations.length}項目</Text>
             </View>
 
             <View style={styles.evaluationList}>
@@ -283,6 +385,9 @@ export default function ConditionCheckScreen() {
                       {item.detail}
                     </Text>
                     <Text style={[styles.confidenceText, { color: colors.mutedForeground }]}>
+                      {item.count ? countLabels[item.count] : '所見数：未記録'}
+                    </Text>
+                    <Text style={[styles.confidenceText, { color: colors.mutedForeground }]}>
                       判定への確信度 {Math.round(item.confidence * 100)}%
                     </Text>
                   </View>
@@ -295,7 +400,7 @@ export default function ConditionCheckScreen() {
         <View style={[styles.warning, { backgroundColor: colors.secondary }]}>
           <Feather name="alert-circle" size={18} color={colors.primary} />
           <Text style={[styles.warningText, { color: colors.mutedForeground }]}>
-            この結果は撮影画像から確認できる範囲をAIが推定したもので、専門鑑定機関による鑑定結果を示すものではありません。写っていない箇所の状態や真贋は判断できません。
+            CARD EYE状態ランクは撮影画像から確認できる範囲を独自基準で評価したもので、PSA等の専門鑑定機関による鑑定結果を示すものではありません。
           </Text>
         </View>
 
@@ -337,10 +442,12 @@ export default function ConditionCheckScreen() {
             router.push({
               pathname: '/market-overview',
               params: {
-                uri: displayUri ?? '',
+                scanId: isCurrentScan ? activeScanId ?? '' : '',
                 cardName: cardName ?? analysis?.cardName ?? '',
+                series: series ?? analysis?.series ?? '',
                 cardNumber: cardNumber ?? analysis?.cardNumber ?? '',
                 rarity: rarity ?? analysis?.rarity ?? '',
+                catalogCardId: analysis?.catalogMatch?.matchedCardId ?? '',
               },
             })
           }
@@ -390,6 +497,13 @@ const styles = StyleSheet.create({
   heading: { fontSize: 25, fontWeight: '700', letterSpacing: -0.5 },
   description: { fontSize: 13, lineHeight: 20 },
   overallCard: { width: '100%', borderWidth: 1, borderRadius: 20, padding: 16 },
+  rankCard: { width: '100%', borderWidth: 1, borderRadius: 20, padding: 18, gap: 8 },
+  rankHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  rankCopy: { flex: 1, gap: 4 },
+  rankTitle: { fontSize: 13, fontWeight: '700' },
+  rankValue: { fontSize: 34, fontWeight: '800', letterSpacing: -0.6 },
+  rankReason: { fontSize: 13, lineHeight: 19 },
+  rankGuidance: { fontSize: 12, fontWeight: '600', lineHeight: 18, marginTop: 3 },
   loadingCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   overallHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   overallIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },

@@ -47,7 +47,23 @@ function isObservations(value: unknown): value is CardObservations {
 }
 
 const conditionKeys = ['surface', 'corners', 'edges', 'whitening', 'centering', 'scratches'] as const;
+const additionalConditionKeys = ['dents', 'creases', 'peeling', 'water_damage'] as const;
 const conditionStatuses = ['good', 'minor', 'moderate', 'significant', 'uncertain', 'not_assessable'] as const;
+const conditionCounts = ['none', 'one', 'few', 'many', 'unknown'] as const;
+const conditionRanks = ['S', 'A', 'A-', 'B', 'C', 'D', 'unassessable'] as const;
+
+function isConditionJudgement(value: unknown, allowMissingCount: boolean): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const judgement = value as Record<string, unknown>;
+  return conditionStatuses.includes(judgement.status as (typeof conditionStatuses)[number])
+    && typeof judgement.confidence === 'number'
+    && Number.isFinite(judgement.confidence)
+    && judgement.confidence >= 0
+    && judgement.confidence <= 1
+    && typeof judgement.note === 'string'
+    && (allowMissingCount && judgement.count === undefined
+      || conditionCounts.includes(judgement.count as (typeof conditionCounts)[number]));
+}
 
 function isConditionAnalysis(value: unknown): value is ConditionAnalysis {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -64,17 +80,19 @@ function isConditionAnalysis(value: unknown): value is ConditionAnalysis {
     'conditionAssessable',
   ].every((key) => typeof checks[key] === 'boolean');
 
-  return conditionKeys.every((key) => {
-    const item = report[key];
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-    const judgement = item as Record<string, unknown>;
-    return conditionStatuses.includes(judgement.status as (typeof conditionStatuses)[number])
-      && typeof judgement.confidence === 'number'
-      && Number.isFinite(judgement.confidence)
-      && judgement.confidence >= 0
-      && judgement.confidence <= 1
-      && typeof judgement.note === 'string';
-  })
+  const rankFieldsPresent = ['overall_rank', 'rank_confidence', 'rank_reason']
+    .some((key) => report[key] !== undefined);
+  const hasValidRank = !rankFieldsPresent
+    || (conditionRanks.includes(report.overall_rank as (typeof conditionRanks)[number])
+      && typeof report.rank_confidence === 'number'
+      && Number.isFinite(report.rank_confidence)
+      && report.rank_confidence >= 0
+      && report.rank_confidence <= 1
+      && typeof report.rank_reason === 'string');
+
+  return conditionKeys.every((key) => isConditionJudgement(report[key], !rankFieldsPresent))
+    && additionalConditionKeys.every((key) => report[key] === undefined
+      || isConditionJudgement(report[key], false))
     && typeof report.overallConfidence === 'number'
     && Number.isFinite(report.overallConfidence)
     && report.overallConfidence >= 0
@@ -83,7 +101,9 @@ function isConditionAnalysis(value: unknown): value is ConditionAnalysis {
     && typeof report.retakeRecommended === 'boolean'
     && hasValidChecks
     && Array.isArray(report.limitations)
-    && report.limitations.every((item) => typeof item === 'string');
+    && report.limitations.every((item) => typeof item === 'string')
+    && hasValidRank
+    && (!rankFieldsPresent || additionalConditionKeys.every((key) => report[key] !== undefined));
 }
 
 function isSavedCard(value: unknown): value is SavedCard {

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ConditionAnalysisImageQuality } from './conditionAnalysisImageQuality';
+import type { ConditionAnalysisOverallRank } from './conditionAnalysisOverallRank';
 import type { ConditionJudgement } from './conditionJudgement';
 import type { ConditionQualityChecks } from './conditionQualityChecks';
 
@@ -16,6 +17,18 @@ export interface ConditionAnalysis {
   whitening: ConditionJudgement;
   centering: ConditionJudgement;
   scratches: ConditionJudgement;
+  dents: ConditionJudgement;
+  creases: ConditionJudgement;
+  peeling: ConditionJudgement;
+  water_damage: ConditionJudgement;
+  /** CARD EYE image-based condition rank, not a professional grading equivalent. */
+  overall_rank: ConditionAnalysisOverallRank;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  rank_confidence: number;
+  rank_reason: string;
   /**
      * @minimum 0
      * @maximum 1

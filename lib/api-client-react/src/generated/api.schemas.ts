@@ -5,6 +5,53 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface CatalogCard {
+  id: string;
+  name: string;
+  number: string;
+  series: string;
+  rarity: string;
+  /** @nullable */
+  imageUrl: string | null;
+}
+
+export interface CatalogCardResponse {
+  card: CatalogCard;
+}
+
+/**
+ * @nullable
+ */
+export type FeaturedCardMarketPriceBasis = typeof FeaturedCardMarketPriceBasis[keyof typeof FeaturedCardMarketPriceBasis] | null;
+
+
+export const FeaturedCardMarketPriceBasis = {
+  confirmed_ungraded_sales: 'confirmed_ungraded_sales',
+} as const;
+
+export interface FeaturedCard {
+  id: string;
+  name: string;
+  number: string;
+  series: string;
+  rarity: string;
+  imageUrl: string;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  marketPrice: number | null;
+  /** @nullable */
+  marketPriceBasis: FeaturedCardMarketPriceBasis;
+  /** @minimum 0 */
+  transactionCount: number;
+}
+
+export interface FeaturedCardsResponse {
+  /** @maxItems 12 */
+  cards: FeaturedCard[];
+}
+
 export interface SupabaseStatus {
   connected: boolean;
 }
@@ -75,6 +122,20 @@ export const ConditionJudgementStatus = {
   not_assessable: 'not_assessable',
 } as const;
 
+/**
+ * Number of visible defects; unknown when the image does not support a count.
+ */
+export type ConditionJudgementCount = typeof ConditionJudgementCount[keyof typeof ConditionJudgementCount];
+
+
+export const ConditionJudgementCount = {
+  none: 'none',
+  one: 'one',
+  few: 'few',
+  many: 'many',
+  unknown: 'unknown',
+} as const;
+
 export interface ConditionJudgement {
   status: ConditionJudgementStatus;
   /**
@@ -83,6 +144,8 @@ export interface ConditionJudgement {
      */
   confidence: number;
   note: string;
+  /** Number of visible defects; unknown when the image does not support a count. */
+  count: ConditionJudgementCount;
 }
 
 export interface ConditionQualityChecks {
@@ -92,6 +155,22 @@ export interface ConditionQualityChecks {
   cropped: boolean;
   conditionAssessable: boolean;
 }
+
+/**
+ * CARD EYE image-based condition rank, not a professional grading equivalent.
+ */
+export type ConditionAnalysisOverallRank = typeof ConditionAnalysisOverallRank[keyof typeof ConditionAnalysisOverallRank];
+
+
+export const ConditionAnalysisOverallRank = {
+  S: 'S',
+  A: 'A',
+  'A-': 'A-',
+  B: 'B',
+  C: 'C',
+  D: 'D',
+  unassessable: 'unassessable',
+} as const;
 
 export type ConditionAnalysisImageQuality = typeof ConditionAnalysisImageQuality[keyof typeof ConditionAnalysisImageQuality];
 
@@ -109,6 +188,18 @@ export interface ConditionAnalysis {
   whitening: ConditionJudgement;
   centering: ConditionJudgement;
   scratches: ConditionJudgement;
+  dents: ConditionJudgement;
+  creases: ConditionJudgement;
+  peeling: ConditionJudgement;
+  water_damage: ConditionJudgement;
+  /** CARD EYE image-based condition rank, not a professional grading equivalent. */
+  overall_rank: ConditionAnalysisOverallRank;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  rank_confidence: number;
+  rank_reason: string;
   /**
      * @minimum 0
      * @maximum 1
@@ -303,6 +394,8 @@ export interface PriceSummary {
   shopMedian: number | null;
   /** @nullable */
   buybackMedian: number | null;
+  /** @nullable */
+  psa10Median: number | null;
   transactionCount: number;
   /** @nullable */
   confidenceScore: number | null;
@@ -312,6 +405,37 @@ export interface PriceSummary {
   lowestPrice: number | null;
   /** @nullable */
   changePercent: number | null;
+}
+
+export type PriceObservationSourceType = typeof PriceObservationSourceType[keyof typeof PriceObservationSourceType];
+
+
+export const PriceObservationSourceType = {
+  SHOP: 'SHOP',
+  MARKETPLACE: 'MARKETPLACE',
+} as const;
+
+export type PriceObservationSaleStatus = typeof PriceObservationSaleStatus[keyof typeof PriceObservationSaleStatus];
+
+
+export const PriceObservationSaleStatus = {
+  sold: 'sold',
+  listing: 'listing',
+  buyback: 'buyback',
+} as const;
+
+export interface PriceObservation {
+  source: string;
+  sourceType: PriceObservationSourceType;
+  observedAt: string;
+  /** @exclusiveMinimum 0 */
+  price: number;
+  /** @nullable */
+  condition: string | null;
+  graded: false;
+  /** @nullable */
+  grade: null;
+  saleStatus: PriceObservationSaleStatus;
 }
 
 export type CardPricesCurrency = typeof CardPricesCurrency[keyof typeof CardPricesCurrency];
@@ -339,6 +463,27 @@ export const CardPricesPeriodDays = {
   NUMBER_365: 365,
 } as const;
 
+export type CardPricesMarketPriceConfidence = typeof CardPricesMarketPriceConfidence[keyof typeof CardPricesMarketPriceConfidence];
+
+
+export const CardPricesMarketPriceConfidence = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  insufficient: 'insufficient',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CardPricesMarketPriceBasis = typeof CardPricesMarketPriceBasis[keyof typeof CardPricesMarketPriceBasis] | null;
+
+
+export const CardPricesMarketPriceBasis = {
+  confirmed_ungraded_sales: 'confirmed_ungraded_sales',
+  shop_listing_reference: 'shop_listing_reference',
+} as const;
+
 export type CardPricesSources = {
   sales: PriceListing[];
   transactions: PriceTransactionSummary[];
@@ -357,6 +502,10 @@ export interface CardPrices {
   periodDays: CardPricesPeriodDays;
   /** @nullable */
   marketPrice: number | null;
+  marketPriceConfidence: CardPricesMarketPriceConfidence;
+  /** @nullable */
+  marketPriceBasis: CardPricesMarketPriceBasis;
+  observations: PriceObservation[];
   reference: PriceReference | null;
   summary: PriceSummary;
   sources: CardPricesSources;
@@ -377,6 +526,103 @@ export interface MarketAnalysisInput {
      */
   name: string;
   condition: ConditionAnalysis | null;
+}
+
+export interface AiMarketSearchRequest {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  cardName: string;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  cardNumber?: string | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  series?: string | null;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  rarity?: string | null;
+}
+
+export type AiMarketSearchSourceCategory = typeof AiMarketSearchSourceCategory[keyof typeof AiMarketSearchSourceCategory];
+
+
+export const AiMarketSearchSourceCategory = {
+  sale: 'sale',
+  shop: 'shop',
+  buyback: 'buyback',
+  psa10: 'psa10',
+} as const;
+
+export interface AiMarketSearchSource {
+  title: string;
+  url: string;
+  category: AiMarketSearchSourceCategory;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  price: number | null;
+}
+
+export interface AiMarketSearchResponse {
+  cardName: string;
+  /** @nullable */
+  cardNumber: string | null;
+  /** @nullable */
+  series: string | null;
+  /** @nullable */
+  rarity: string | null;
+  searchedAt: string;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  marketPrice: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  saleMedian: number | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  saleCount: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  shopMin: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  shopMax: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  buybackMin: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  buybackMax: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  psa10Median: number | null;
+  explanation: string;
+  sources: AiMarketSearchSource[];
 }
 
 export interface MarketEvent {

@@ -20,11 +20,15 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AiMarketSearchRequest,
+  AiMarketSearchResponse,
   AnalyzeScanRequest,
   CardAnalysis,
   CardPrices,
+  CatalogCardResponse,
   ConditionAnalysis,
   ConditionScanInput,
+  FeaturedCardsResponse,
   GetCardPricesParams,
   HealthStatus,
   MarketAnalysis,
@@ -479,6 +483,160 @@ export function useGetCardPrices<TData = Awaited<ReturnType<typeof getCardPrices
 
 
 
+export const getGetFeaturedCardsUrl = () => {
+
+
+
+
+  return `/api/cards/featured`
+}
+
+/**
+ * @summary Get curated featured cards with confirmed recent sale prices when available
+ */
+export const getFeaturedCards = async ( options?: Parameters<typeof customFetch>[1]): Promise<FeaturedCardsResponse> => {
+
+  return customFetch<FeaturedCardsResponse>(getGetFeaturedCardsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFeaturedCardsQueryKey = () => {
+    return [
+    `/api/cards/featured`
+    ] as const;
+    }
+
+
+export const getGetFeaturedCardsQueryOptions = <TData = Awaited<ReturnType<typeof getFeaturedCards>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeaturedCards>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFeaturedCardsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFeaturedCards>>> = ({ signal }) => getFeaturedCards({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFeaturedCards>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFeaturedCardsQueryResult = NonNullable<Awaited<ReturnType<typeof getFeaturedCards>>>
+export type GetFeaturedCardsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get curated featured cards with confirmed recent sale prices when available
+ */
+
+export function useGetFeaturedCards<TData = Awaited<ReturnType<typeof getFeaturedCards>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeaturedCards>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFeaturedCardsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCatalogCardUrl = (cardId: string,) => {
+
+
+
+
+  return `/api/cards/catalog/${cardId}`
+}
+
+/**
+ * @summary Get a catalog card by canonical UUID
+ */
+export const getCatalogCard = async (cardId: string, options?: Parameters<typeof customFetch>[1]): Promise<CatalogCardResponse> => {
+
+  return customFetch<CatalogCardResponse>(getGetCatalogCardUrl(cardId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCatalogCardQueryKey = (cardId: string,) => {
+    return [
+    `/api/cards/catalog/${cardId}`
+    ] as const;
+    }
+
+
+export const getGetCatalogCardQueryOptions = <TData = Awaited<ReturnType<typeof getCatalogCard>>, TError = ErrorType<void>>(cardId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogCard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCatalogCardQueryKey(cardId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCatalogCard>>> = ({ signal }) => getCatalogCard(cardId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: cardId !== null && cardId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCatalogCard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCatalogCardQueryResult = NonNullable<Awaited<ReturnType<typeof getCatalogCard>>>
+export type GetCatalogCardQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a catalog card by canonical UUID
+ */
+
+export function useGetCatalogCard<TData = Awaited<ReturnType<typeof getCatalogCard>>, TError = ErrorType<void>>(
+ cardId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogCard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCatalogCardQueryOptions(cardId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getAnalyzeMarketUrl = () => {
 
 
@@ -565,5 +723,94 @@ export const useAnalyzeMarket = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAnalyzeMarketMutationOptions(options));
+    }
+
+export const getSearchCardMarketWithAiUrl = () => {
+
+
+
+
+  return `/api/cards/ai-market-search`
+}
+
+/**
+ * Returns cited current market signals from an OpenAI Responses API web search. AI estimates are references only and are not stored as confirmed price observations.
+ * @summary Search Japanese card price references using AI web research
+ */
+export const searchCardMarketWithAi = async (aiMarketSearchRequest: AiMarketSearchRequest, options?: Parameters<typeof customFetch>[1]): Promise<AiMarketSearchResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AiMarketSearchResponse>(getSearchCardMarketWithAiUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(aiMarketSearchRequest)
+  }
+);}
+
+
+
+
+
+export const getSearchCardMarketWithAiMutationKey = () => ['searchCardMarketWithAi'] as const;
+
+export const getSearchCardMarketWithAiMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchCardMarketWithAi>>, TError,SearchCardMarketWithAiMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof searchCardMarketWithAi>>, TError,SearchCardMarketWithAiMutationVariables, TContext> => {
+
+const mutationKey = getSearchCardMarketWithAiMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof searchCardMarketWithAi>>, SearchCardMarketWithAiMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  searchCardMarketWithAi(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SearchCardMarketWithAiMutationResult = NonNullable<Awaited<ReturnType<typeof searchCardMarketWithAi>>>
+    export type SearchCardMarketWithAiMutationBody = BodyType<AiMarketSearchRequest>
+    export type SearchCardMarketWithAiMutationError = ErrorType<void>
+    export type SearchCardMarketWithAiMutationVariables = {data: BodyType<AiMarketSearchRequest>}
+
+    /**
+ * @summary Search Japanese card price references using AI web research
+ */
+export const useSearchCardMarketWithAi = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchCardMarketWithAi>>, TError,SearchCardMarketWithAiMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof searchCardMarketWithAi>>,
+        TError,
+        SearchCardMarketWithAiMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSearchCardMarketWithAiMutationOptions(options));
     }
 

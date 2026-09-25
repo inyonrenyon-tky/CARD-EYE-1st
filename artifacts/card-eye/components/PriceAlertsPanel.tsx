@@ -20,7 +20,10 @@ function quoteFromPrices(prices: Awaited<ReturnType<typeof getCardPrices>>, basi
     const available = prices.sources.transactions.filter((item) => item.lastUpdated !== null && item.transactionCount > 0);
     const source = [...available]
       .sort((a, b) => (b.lastUpdated ?? '').localeCompare(a.lastUpdated ?? ''))[0];
-    return prices.marketPrice !== null && source?.lastUpdated
+    return prices.marketPrice !== null
+      && prices.marketPriceBasis === 'confirmed_ungraded_sales'
+      && prices.summary.transactionCount >= 3
+      && source?.lastUpdated
       ? { price: prices.marketPrice, observedAt: source.lastUpdated, source: available.length === 1 ? source.displayName : '確認済み成約（複数ソース）' }
       : null;
   }
@@ -80,10 +83,12 @@ export function PriceAlertsPanel() {
       for (const initial of alertsRef.current) {
         const rule = alertsRef.current.find((item) => item.id === initial.id);
         if (!rule || !rule.enabled) continue;
+        const savedCard = cards.find((item) => item.id === rule.savedCardId);
+        const requestCardId = rule.cardCatalogId ?? savedCard?.catalogCardId ?? rule.cardNumber;
         let prices: Awaited<ReturnType<typeof getCardPrices>>;
         try {
-          prices = await getCardPrices(encodeURIComponent(rule.cardNumber), {
-            name: rule.cardName, period: 30, demo: false,
+          prices = await getCardPrices(encodeURIComponent(requestCardId), {
+            name: rule.cardName, period: rule.basis === 'SALE' ? 90 : 30, demo: false,
           }, { cache: 'no-store' });
         } catch {
           setStatuses((prev) => ({ ...prev, [rule.id]: '価格を取得できませんでした' }));
@@ -107,7 +112,7 @@ export function PriceAlertsPanel() {
       checking.current = false;
       setRefreshing(false);
     }
-  }, [persist]);
+  }, [cards, persist]);
 
   useFocusEffect(useCallback(() => {
     if (loaded && !storageError) void checkAll();
@@ -125,10 +130,11 @@ export function PriceAlertsPanel() {
 
   const saveRule = async () => {
     const card = cards.find((item) => item.id === selectedCardId);
-    const cardNumber = card?.number.match(/(?:^|\s)(\d{1,4}\/[\w-]{2,25})$/i)?.[1];
+    const printedCardNumber = card?.number.match(/(?:^|\s)(\d{1,4}\/[\w-]{2,25})$/i)?.[1];
+    const cardNumber = printedCardNumber ?? card?.number;
     const amount = Number(threshold);
-    if (!card || !cardNumber || !card.name.trim()) {
-      setEditorError('カード名と「番号/セット番号」がある保存カードを選んでください。');
+    if (!card || (!printedCardNumber && !card.catalogCardId) || !cardNumber || !card.name.trim()) {
+      setEditorError('カード名と有効なカード番号またはカードマスターIDがある保存カードを選んでください。');
       return;
     }
     if (!/^\d+$/.test(threshold) || !Number.isSafeInteger(amount) || amount < 1 || amount > 100_000_000) {
@@ -142,7 +148,8 @@ export function PriceAlertsPanel() {
     const previous = alertsRef.current.find((item) => item.id === editingId);
     const rule: PriceAlert = {
       id: previous?.id ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
-      savedCardId: card.id, cardName: card.name.trim(), cardNumber, basis, direction, threshold: amount,
+      savedCardId: card.id, cardCatalogId: card.catalogCardId ?? null,
+      cardName: card.name.trim(), cardNumber, basis, direction, threshold: amount,
       enabled: previous?.enabled ?? true, triggered: false, lastPrice: null,
       lastObservedAt: null, lastSource: null, triggeredAt: null,
     };

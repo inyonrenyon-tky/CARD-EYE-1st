@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ConditionJudgementCount } from './conditionJudgementCount';
 import type { ConditionJudgementStatus } from './conditionJudgementStatus';
 
 export interface ConditionJudgement {
@@ -15,4 +16,6 @@ export interface ConditionJudgement {
      */
   confidence: number;
   note: string;
+  /** Number of visible defects; unknown when the image does not support a count. */
+  count: ConditionJudgementCount;
 }

@@ -75,16 +75,18 @@ test("no history and listing-only history never invent sale averages", () => {
 
 test("visible card condition is a separate observation and never adjusts price", () => {
   const observations = daily(30, () => 10000);
-  const finding = { status: "uncertain" as const, confidence: 0.5, note: "写真では判断困難" };
+  const finding = { status: "uncertain" as const, confidence: 0.5, note: "写真では判断困難", count: "unknown" as const };
   const report = calculateMarketAnalysis(cardId, snapshot(observations), {
     imageQuality: "acceptable", retakeRecommended: false, overallConfidence: 0.5,
+    overall_rank: "unassessable", rank_confidence: 0.25, rank_reason: "写真では判断困難",
     qualityChecks: {
       wholeCardVisible: true, focusSufficient: true, strongGlare: false,
       cropped: false, conditionAssessable: true,
     },
     surface: finding, corners: finding, edges: finding,
-    whitening: { status: "minor", confidence: 0.6, note: "白かけの可能性" },
-    centering: finding, scratches: finding, limitations: [],
+    whitening: { status: "minor", confidence: 0.6, note: "白かけの可能性", count: "one" },
+    centering: finding, scratches: finding, dents: finding, creases: finding,
+    peeling: finding, water_damage: finding, limitations: [],
   }, now);
   assert.match(report.conditionSummary!, /白かけ/);
   assert.equal(report.currentPrice, 10000);

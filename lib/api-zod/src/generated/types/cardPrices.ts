@@ -6,9 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CardPricesCurrency } from './cardPricesCurrency';
+import type { CardPricesMarketPriceBasis } from './cardPricesMarketPriceBasis';
+import type { CardPricesMarketPriceConfidence } from './cardPricesMarketPriceConfidence';
 import type { CardPricesMode } from './cardPricesMode';
 import type { CardPricesPeriodDays } from './cardPricesPeriodDays';
 import type { CardPricesSources } from './cardPricesSources';
+import type { PriceObservation } from './priceObservation';
 import type { PriceReference } from './priceReference';
 import type { PriceSourceAvailability } from './priceSourceAvailability';
 import type { PriceSourceConfig } from './priceSourceConfig';
@@ -21,6 +24,10 @@ export interface CardPrices {
   periodDays: CardPricesPeriodDays;
   /** @nullable */
   marketPrice: number | null;
+  marketPriceConfidence: CardPricesMarketPriceConfidence;
+  /** @nullable */
+  marketPriceBasis: CardPricesMarketPriceBasis;
+  observations: PriceObservation[];
   reference: PriceReference | null;
   summary: PriceSummary;
   sources: CardPricesSources;

@@ -15,20 +15,21 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useScan } from '@/hooks/ScanContext';
+import { holdPhoto, PhotoReadError } from '@/lib/readPhoto';
 
 export default function CameraScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { clearScan } = useScan();
+  const { setPhotoUri } = useScan();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [flash, setFlash] = useState<FlashMode>('off');
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
 
-  const openPreview = (uri: string) => {
-    clearScan();
-    router.push({ pathname: '/camera-preview', params: { uri } });
+  const openPreview = async (uri: string) => {
+    setPhotoUri(await holdPhoto(uri));
+    router.push('/camera-preview');
   };
 
   const takePhoto = async () => {
@@ -41,10 +42,10 @@ export default function CameraScreen() {
         shutterSound: true,
       });
       if (photo?.uri) {
-        openPreview(photo.uri);
+        await openPreview(photo.uri);
       }
-    } catch {
-      Alert.alert('撮影できませんでした', 'もう一度お試しください。');
+    } catch (error) {
+      Alert.alert('撮影できませんでした', error instanceof PhotoReadError ? error.message : 'もう一度お試しください。');
     } finally {
       setIsBusy(false);
     }
@@ -60,10 +61,10 @@ export default function CameraScreen() {
         quality: 1,
       });
       if (!result.canceled && result.assets[0]?.uri) {
-        openPreview(result.assets[0].uri);
+        await openPreview(result.assets[0].uri);
       }
-    } catch {
-      Alert.alert('写真を選択できませんでした', 'もう一度お試しください。');
+    } catch (error) {
+      Alert.alert('写真を選択できませんでした', error instanceof PhotoReadError ? error.message : 'もう一度お試しください。');
     } finally {
       setIsBusy(false);
     }

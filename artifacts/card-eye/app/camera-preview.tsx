@@ -1,13 +1,14 @@
 import { Feather } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { useScan } from '@/hooks/ScanContext';
 
 export default function CameraPreviewScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { uri } = useLocalSearchParams<{ uri?: string }>();
+  const { uri, clearScan } = useScan();
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -16,7 +17,7 @@ export default function CameraPreviewScreen() {
           accessibilityRole="button"
           accessibilityLabel="撮影画面に戻る"
           testID="preview-retake-top-button"
-          onPress={() => router.replace('/camera')}
+          onPress={() => { clearScan(); router.replace('/camera'); }}
           style={({ pressed }) => [
             styles.iconButton,
             { backgroundColor: colors.secondary, opacity: pressed ? 0.7 : 1 },
@@ -51,7 +52,7 @@ export default function CameraPreviewScreen() {
           accessibilityRole="button"
           accessibilityLabel="撮り直す"
           testID="preview-retake-button"
-          onPress={() => router.replace('/camera')}
+          onPress={() => { clearScan(); router.replace('/camera'); }}
           style={({ pressed }) => [
             styles.secondaryButton,
             { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
@@ -65,9 +66,7 @@ export default function CameraPreviewScreen() {
           accessibilityLabel="この写真を解析"
           testID="analyze-photo-button"
           disabled={!uri}
-          onPress={() =>
-            router.push({ pathname: '/analysis-result', params: { uri: uri ?? '' } })
-          }
+          onPress={() => router.push('/analysis-result')}
           style={({ pressed }) => [
             styles.primaryButton,
             { backgroundColor: colors.primary, opacity: !uri ? 0.45 : pressed ? 0.78 : 1 },

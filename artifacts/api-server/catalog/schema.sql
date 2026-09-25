@@ -65,6 +65,15 @@ create table if not exists public.card_images (
   usable_in_card_eye boolean not null default false,
   unique (card_id, source, image_url)
 );
+-- Additive image metadata keeps existing, unreviewed references non-primary.
+alter table public.card_images add column if not exists source_url text;
+alter table public.card_images add column if not exists image_type text not null default 'primary';
+alter table public.card_images add column if not exists is_primary boolean not null default false;
+alter table public.card_images add column if not exists verified boolean not null default false;
+alter table public.card_images add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table public.card_images add column if not exists updated_at timestamptz not null default now();
+create unique index if not exists card_images_single_primary_idx
+  on public.card_images(card_id,image_type) where is_primary=true;
 create table if not exists public.catalog_sync_runs (
   id uuid primary key default gen_random_uuid(),
   provider text not null,
@@ -87,6 +96,18 @@ create table if not exists public.scan_analyses (
   created_at timestamptz not null default now()
 );
 
+-- Curated featured-card choices are managed by trusted catalog administrators.
+-- There are deliberately no seeded candidates; configuration is data, not app code.
+create table if not exists public.card_featured_config (
+  card_id uuid primary key references public.cards(id) on delete cascade,
+  active boolean not null default true,
+  priority integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists card_featured_active_priority_idx
+  on public.card_featured_config(priority desc,card_id) where active=true;
+
 -- Only public catalog metadata is readable. No public write policy exists.
 alter table public.card_sets enable row level security;
 alter table public.card_eye_catalog_migrations enable row level security;
@@ -95,8 +116,9 @@ alter table public.card_external_ids enable row level security;
 alter table public.card_images enable row level security;
 alter table public.catalog_sync_runs enable row level security;
 alter table public.scan_analyses enable row level security;
+alter table public.card_featured_config enable row level security;
 revoke all on public.card_eye_catalog_migrations, public.card_sets, public.cards, public.card_external_ids,
-  public.card_images, public.catalog_sync_runs, public.scan_analyses from anon, authenticated;
+  public.card_images, public.catalog_sync_runs, public.scan_analyses, public.card_featured_config from anon, authenticated;
 grant select on public.card_sets, public.cards to anon, authenticated;
 drop policy if exists card_eye_public_sets_read on public.card_sets;
 create policy card_eye_public_sets_read on public.card_sets for select to anon, authenticated using (true);

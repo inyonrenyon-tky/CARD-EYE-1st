@@ -6,6 +6,8 @@ export type PriceAlert = {
   savedCardId: string;
   cardName: string;
   cardNumber: string;
+  /** Present on rules created from catalog-linked saved cards. */
+  cardCatalogId?: string | null;
   basis: 'SALE' | 'LISTING';
   direction: 'above' | 'below';
   threshold: number;
@@ -32,6 +34,8 @@ export function parsePriceAlerts(raw: string | null): PriceAlert[] {
     const rule = item as Partial<PriceAlert>;
     if (typeof rule.id !== 'string' || typeof rule.savedCardId !== 'string' ||
         typeof rule.cardName !== 'string' || typeof rule.cardNumber !== 'string' ||
+        !(rule.cardCatalogId === undefined || rule.cardCatalogId === null
+          || (typeof rule.cardCatalogId === 'string' && /^[a-f0-9-]{36}$/i.test(rule.cardCatalogId))) ||
         !['SALE', 'LISTING'].includes(rule.basis ?? '') ||
         !['above', 'below'].includes(rule.direction ?? '') ||
         !Number.isInteger(rule.threshold) || (rule.threshold ?? 0) < 1 || (rule.threshold ?? 0) > 100_000_000 ||

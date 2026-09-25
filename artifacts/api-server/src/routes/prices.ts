@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { getCardPrices, type PeriodDays } from "../lib/price-domain";
 import { getLiveCardPrices } from "../lib/live-prices";
 import { GetCardPricesParams, GetCardPricesQueryParams, GetCardPricesResponse } from "@workspace/api-zod";
+import { getCatalogCard, isCanonicalCatalogUuid } from "../catalog/cards";
 
 const router: IRouter = Router();
 
@@ -20,9 +21,19 @@ router.get("/cards/:cardId/prices", async (req, res) => {
     return;
   }
   try {
+    const requestedId = req.params.cardId;
+    const catalogId = isCanonicalCatalogUuid(requestedId);
+    const catalogCard = catalogId ? await getCatalogCard(requestedId) : null;
+    if (catalogId && !catalogCard) {
+      res.status(404).json({ error: "Catalog card not found" });
+      return;
+    }
+    const resolvedNumber = catalogCard?.number ?? requestedId;
+    const resolvedName = catalogCard?.name ?? req.query.name as string | undefined;
     const payload = demo
-      ? getCardPrices(req.params.cardId, period as PeriodDays, "demo")
-      : await getLiveCardPrices(req.params.cardId, req.query.name as string | undefined, period as PeriodDays);
+      ? getCardPrices(requestedId, period as PeriodDays, "demo")
+      : await getLiveCardPrices(resolvedNumber, resolvedName, period as PeriodDays, !!catalogCard);
+    if (catalogCard) payload.cardId = requestedId;
     res.json(GetCardPricesResponse.parse(payload));
   } catch (error) {
     req.log.error({ error }, "Could not assemble card prices");

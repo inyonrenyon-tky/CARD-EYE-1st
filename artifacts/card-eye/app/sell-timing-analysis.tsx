@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PriceChart, type ChartSource } from '@/components/PriceChart';
+import { CardThumbnail } from '@/components/CardThumbnail';
 import { useColors } from '@/hooks/useColors';
 import { useSavedCards } from '@/hooks/SavedCardsContext';
 import {
@@ -58,7 +59,9 @@ export default function SellTimingAnalysisScreen() {
   const [period, setPeriod] = useState<7 | 30 | 90>(30);
   const card = cards.find((item) => item.id === savedCardId);
   const market = useAnalyzeMarket();
-  const cardId = card?.number.match(/(?:^|\s)(\d{1,4}\/[\w-]{2,25})$/i)?.[1] ?? null;
+  const cardId = card?.catalogCardId
+    ?? card?.number.match(/(?:^|\s)(\d{1,4}\/[\w-]{2,25})$/i)?.[1]
+    ?? null;
   const condition = card?.conditionAnalysis ?? null;
 
   const requestPayload = useMemo(() => {
@@ -140,8 +143,17 @@ export default function SellTimingAnalysisScreen() {
         ) : (
           <>
             <View style={[styles.identityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={[styles.identityIcon, { backgroundColor: colors.accent }]}>
-                <Feather name="bar-chart-2" size={19} color={colors.primary} />
+              <View style={styles.identityImage}>
+                <CardThumbnail
+                  compact
+                  card={{
+                    name: card.name,
+                    number: card.number,
+                    series: card.series,
+                    rarity: card.rarity,
+                    cardId: card.catalogCardId,
+                  }}
+                />
               </View>
               <View style={styles.identityCopy}>
                 <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={2}>{card.name}</Text>
@@ -383,7 +395,7 @@ const styles = StyleSheet.create({
   topTitle: { fontSize: 19, fontWeight: '800' },
   content: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 8, gap: 22 },
   identityCard: { width: '100%', borderWidth: 1, borderRadius: 18, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 13 },
-  identityIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  identityImage: { width: 54, height: 74, borderRadius: 9, overflow: 'hidden' },
   identityCopy: { flex: 1, gap: 4 },
   cardName: { fontSize: 16, fontWeight: '700' },
   cardNumber: { fontSize: 12 },

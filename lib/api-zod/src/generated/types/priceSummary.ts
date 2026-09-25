@@ -13,6 +13,8 @@ export interface PriceSummary {
   shopMedian: number | null;
   /** @nullable */
   buybackMedian: number | null;
+  /** @nullable */
+  psa10Median: number | null;
   transactionCount: number;
   /** @nullable */
   confidenceScore: number | null;

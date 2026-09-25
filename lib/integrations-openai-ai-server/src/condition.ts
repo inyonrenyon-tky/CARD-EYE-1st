@@ -1,4 +1,5 @@
 import { openai } from "./client";
+import { computeConditionRank } from "./condition-rank";
 
 export type ConditionImage = {
   imageBase64: string;
@@ -10,15 +11,19 @@ export type ConditionJudgement = {
   status: "good" | "minor" | "moderate" | "significant" | "uncertain" | "not_assessable";
   confidence: number;
   note: string;
+  count: "none" | "one" | "few" | "many" | "unknown";
 };
 
+export type ConditionFinding =
+  | "surface" | "corners" | "edges" | "whitening" | "centering" | "scratches"
+  | "dents" | "creases" | "peeling" | "water_damage";
+
 export type ConditionAnalysis = {
-  surface: ConditionJudgement;
-  corners: ConditionJudgement;
-  edges: ConditionJudgement;
-  whitening: ConditionJudgement;
-  centering: ConditionJudgement;
-  scratches: ConditionJudgement;
+  [key in ConditionFinding]: ConditionJudgement;
+} & {
+  overall_rank: "S" | "A" | "A-" | "B" | "C" | "D" | "unassessable";
+  rank_confidence: number;
+  rank_reason: string;
   overallConfidence: number;
   imageQuality: "acceptable" | "limited" | "unusable";
   retakeRecommended: boolean;
@@ -35,7 +40,7 @@ export type ConditionAnalysis = {
 const judgementSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["status", "confidence", "note"],
+  required: ["status", "confidence", "note", "count"],
   properties: {
     status: {
       type: "string",
@@ -43,6 +48,7 @@ const judgementSchema = {
     },
     confidence: { type: "number" },
     note: { type: "string" },
+    count: { type: "string", enum: ["none", "one", "few", "many", "unknown"] },
   },
 } as const;
 
@@ -56,6 +62,13 @@ const conditionSchema = {
     "whitening",
     "centering",
     "scratches",
+    "dents",
+    "creases",
+    "peeling",
+    "water_damage",
+    "overall_rank",
+    "rank_confidence",
+    "rank_reason",
     "overallConfidence",
     "imageQuality",
     "retakeRecommended",
@@ -69,6 +82,13 @@ const conditionSchema = {
     whitening: judgementSchema,
     centering: judgementSchema,
     scratches: judgementSchema,
+    dents: judgementSchema,
+    creases: judgementSchema,
+    peeling: judgementSchema,
+    water_damage: judgementSchema,
+    overall_rank: { type: "string", enum: ["S", "A", "A-", "B", "C", "D", "unassessable"] },
+    rank_confidence: { type: "number" },
+    rank_reason: { type: "string" },
     overallConfidence: { type: "number" },
     imageQuality: { type: "string", enum: ["acceptable", "limited", "unusable"] },
     retakeRecommended: { type: "boolean" },
@@ -101,22 +121,37 @@ const findings = [
   "whitening",
   "centering",
   "scratches",
+  "dents",
+  "creases",
+  "peeling",
+  "water_damage",
 ] as const satisfies readonly (keyof ConditionAnalysis)[];
 
-const prohibitedClaim = /(?:PSA|BGS|CGC|ARS)|(?:本物|偽物|正規品|偽造品)\s*(?:です|だと|である|と判断|と判定|と断定|の可能性)|(?:予想グレード|鑑定結果)\s*[:：は]?\s*[0-9０-９]/i;
+const prohibitedClaim = /(?:\b(?:PSA|BGS|CGC|ARS)\b|本物|偽物|正規品|偽造品|鑑定|グレーディング|真贋|(?:予想)?グレード|grade\s*(?:mapping|equivalent|相当))/i;
 
-export function guardConditionAnalysis(result: ConditionAnalysis): ConditionAnalysis {
+export function guardConditionAnalysis(
+  result: ConditionAnalysis,
+  views: readonly ConditionImage["view"][] = [],
+): ConditionAnalysis {
   result = {
     ...result,
     limitations: result.limitations.map((text) =>
-      prohibitedClaim.test(text) ? "鑑定グレードや真贋は画像から判断できません。" : text),
+      prohibitedClaim.test(text) ? "画像で確認できない内容は判断できません。" : text),
     ...Object.fromEntries(findings.map((key) => [key, prohibitedClaim.test(result[key].note)
       ? {
+          ...result[key],
           status: "uncertain",
           confidence: Math.min(result[key].confidence, 0.25),
-          note: "この画像からこの項目は確実に判断できません。",
+          count: "unknown",
+          note: "画像で確認できない内容は判断できません。",
         }
-      : result[key]])),
+      : result[key].status === "good" && result[key].count === "unknown"
+        ? {
+            ...result[key],
+            status: "uncertain",
+            note: "画像から欠陥数を確認できないため、状態は判断できません。",
+          }
+        : result[key]])),
   } as ConditionAnalysis;
 
   const { qualityChecks } = result;
@@ -125,7 +160,7 @@ export function guardConditionAnalysis(result: ConditionAnalysis): ConditionAnal
     !qualityChecks.conditionAssessable ||
     !qualityChecks.focusSufficient;
   if (unusable) {
-    return {
+    const unassessable = {
       ...result,
       imageQuality: "unusable",
       overallConfidence: Math.min(result.overallConfidence, 0.25),
@@ -136,17 +171,24 @@ export function guardConditionAnalysis(result: ConditionAnalysis): ConditionAnal
           "画像品質が不十分なため、カード状態は正確に判定できません。再撮影してください。",
         ]),
       ),
-      ...Object.fromEntries(
-        findings.map((key) => [
-          key,
-          {
-            status: "not_assessable",
-            confidence: Math.min(result[key].confidence, 0.25),
-            note: "画像品質のため、この項目は正確に確認できません。カード全体にピントを合わせて再撮影してください。",
-          },
-        ]),
-      ),
+      ...Object.fromEntries(findings.map((key) => [
+        key,
+        {
+          ...result[key],
+          status: "not_assessable",
+          confidence: Math.min(result[key].confidence, 0.25),
+          count: "unknown",
+          note: "画像品質のため、この項目は確認できません。カード全体にピントを合わせて再撮影してください。",
+        },
+      ])),
     } as ConditionAnalysis;
+    const rank = computeConditionRank(unassessable, views);
+    return {
+      ...unassessable,
+      overall_rank: rank.rank,
+      rank_confidence: rank.confidence,
+      rank_reason: rank.reason,
+    };
   }
 
   const mustRetake =
@@ -159,14 +201,12 @@ export function guardConditionAnalysis(result: ConditionAnalysis): ConditionAnal
     const blockedByCrop = (qualityChecks.cropped || !qualityChecks.wholeCardVisible) &&
       ["corners", "edges", "whitening", "centering"].includes(key);
     const blockedByGlare = qualityChecks.strongGlare && ["surface", "scratches"].includes(key);
-    if (
-      result[key].status === "good" &&
-      (blockedByCrop || blockedByGlare)
-    ) {
+    if (blockedByCrop || blockedByGlare) {
       guarded[key] = {
         ...result[key],
-        status: "uncertain",
+        status: "not_assessable",
         confidence: Math.min(result[key].confidence, 0.35),
+        count: "unknown",
         note: blockedByGlare
           ? "光の反射で詳細を確認できないため、状態は判断できません。"
           : "カードの一部が切れているため、状態は判断できません。",
@@ -175,10 +215,22 @@ export function guardConditionAnalysis(result: ConditionAnalysis): ConditionAnal
     return guarded;
   }, {});
 
-  return {
+  const guarded = {
     ...result,
     ...maskedFindings,
     retakeRecommended: result.retakeRecommended || mustRetake,
+  } as ConditionAnalysis;
+  const rank = computeConditionRank(guarded, views);
+  return {
+    ...guarded,
+    retakeRecommended: guarded.retakeRecommended || rank.rank === "unassessable",
+    overall_rank: rank.rank,
+    rank_confidence: rank.confidence,
+    rank_reason: prohibitedClaim.test(rank.reason)
+      ? "画像で確認できた範囲に限る状態判定です。見えない部分は判断できません。"
+      : rank.reason,
+    limitations: guarded.limitations.map((text) =>
+      prohibitedClaim.test(text) ? "画像で確認できない内容は判断できません。" : text),
   };
 }
 
@@ -190,7 +242,7 @@ export async function analyzeCardCondition(images: ConditionImage[]): Promise<un
       {
         role: "system",
         content:
-          "あなたはポケモンカードの写真から見える状態だけを観察します。JSON Schemaに厳密に従い、日本語で短く回答してください。PSA・BGS・CGCその他の鑑定グレード、予想グレード、真贋、本物・偽物を断定してはいけません。画像上で確認できない欠陥を推測せず、見えない部分や反射・ぼけのある部分を絶対にgoodにしないでください。confidenceはカードの品質点ではなく、その画像でその観察ができる確信度です。カード全体、ピント、強い反射、切れ、状態の判定可能性を先に評価してください。カードでない画像、強いぼけ、カードの大きな欠落などで状態を評価できない場合はimageQualityをunusable、conditionAssessableをfalseにし、全項目をnot_assessableまたはuncertain、overallConfidenceを低く、retakeRecommendedをtrueにしてください。表面の微細な傷は単一画像では見えないことが多いため、証拠のない「傷なし」は禁止です。limitationsに単一画像では確認できない内容を記してください。",
+          "あなたはカード写真で実際に見える状態だけを観察します。JSON Schemaに厳密に従い日本語で短く回答してください。10項目(surface,corners,edges,whitening,centering,scratches,dents,creases,peeling,water_damage)をすべて個別に確認してから、仮のCARD EYE overall_rankを提案してください。各項目にstatus、画像上で確認できた欠陥数count(none/one/few/many/unknown)、観察確信度confidence、短い根拠noteを入れます。見えない項目・裏面の未撮影・反射・ぼけのある部分をgoodやcount:noneにせずuncertain/not_assessableとcount:unknownにしてください。全画像の実際の品質を評価し、カード全体、ピント、強い反射、切れ、状態の判定可能性を明示してください。カードの傾き・撮影遠近による見かけの歪みと実際の印刷センタリングずれを区別し、遠近だけで悪いcenteringと判断しないでください。CARD EYEのrankは画像上の所見だけに基づく独自の目安で、専門鑑定との対応づけ・鑑定会社名や真贋の言及は禁止です。rank_reasonは簡潔な日本語で、根拠と見えない部分・撮影し直しの必要があれば記してください。写真不良ならunassessableを選びretakeRecommendedをtrueにします。",
       },
       {
         role: "user",
@@ -198,7 +250,12 @@ export async function analyzeCardCondition(images: ConditionImage[]): Promise<un
           {
             type: "text",
             text:
-              "各画像を観察してカードの状態を評価してください。各画像の表示ラベルは撮影位置を示します。まず画像の品質を確認し、観察できない項目はuncertainまたはnot_assessableとしてください。薄い印刷模様や反射を傷・白かけと断定しないでください。",
+              "全画像を観察し、10項目すべてを評価してから暫定ランクを提案してください。各画像のラベルは撮影位置です。画像品質を先に確認し、観察できない項目はuncertainまたはnot_assessable、count unknownとします。カードの傾き/遠近と印刷センタリングを混同せず、薄い印刷模様や反射を傷・白かけと断定しないでください。",
+          },
+          {
+            type: "text",
+            text:
+              "センタリングは正面に近くカード外周と印刷枠の両方が見えるときだけ、左右・上下の偏りを推定してnoteに根拠を書いてください。傾きや遠近歪みがある場合はconfidenceを下げ、実際の印刷位置を確認できなければuncertainとしてください。比率を測定できない写真から数値を作らないでください。",
           },
           ...images.flatMap((image) => [
             {

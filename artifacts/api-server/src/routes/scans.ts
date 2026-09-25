@@ -115,10 +115,13 @@ router.post("/scans/condition", async (req, res) => {
   }
 
   try {
-    const parsedAnalysis = AnalyzeConditionResponse.parse(
+    const parsedModelAnalysis = AnalyzeConditionResponse.parse(
       await analyzeCardCondition(parsed.data.images),
     );
-    const analysis = guardConditionAnalysis(parsedAnalysis);
+    const analysis = guardConditionAnalysis(
+      parsedModelAnalysis,
+      parsed.data.images.map((image) => image.view),
+    );
     res.json(AnalyzeConditionResponse.parse(analysis));
   } catch {
     req.log.error({ imageCount: parsed.data.images.length }, "Card condition analysis failed");

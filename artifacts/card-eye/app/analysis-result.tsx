@@ -1,10 +1,9 @@
 import { Feather } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import {
   Alert,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -12,12 +11,12 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CardArtwork } from '@/components/CardArtwork';
+import { CardThumbnail, useCardRepresentativeImage } from '@/components/CardThumbnail';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
 import { useAnalyzeScan, type CardAnalysis } from '@workspace/api-client-react';
 import { useScan } from '@/hooks/ScanContext';
-import { readPhoto } from '@/lib/readPhoto';
+import { PhotoReadError, readPhoto } from '@/lib/readPhoto';
 
 type CardFields = {
   cardName: string;
@@ -31,10 +30,9 @@ const emptyCard: CardFields = { cardName: '', series: '', cardNumber: '', rarity
 export default function AnalysisResultScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { uri } = useLocalSearchParams<{ uri?: string }>();
-  const { analysis: savedAnalysis, uri: savedUri, setScan } = useScan();
+  const { analysis: savedAnalysis, uri, scanId, setScan, clearScan } = useScan();
   const analyze = useAnalyzeScan();
-  const savedForUri = savedAnalysis && uri && savedUri === uri ? savedAnalysis : null;
+  const savedForUri = savedAnalysis && uri ? savedAnalysis : null;
   const [isEditing, setIsEditing] = useState(false);
   const [card, setCard] = useState<CardFields>(() => ({
     cardName: savedForUri?.cardName ?? '', series: savedForUri?.series ?? '',
@@ -44,6 +42,43 @@ export default function AnalysisResultScreen() {
   const [analysis, setAnalysis] = useState<CardAnalysis | null>(savedForUri);
   const [loadError, setLoadError] = useState<string | null>(null);
   const requestedUri = useRef<string | undefined>(undefined);
+  const imageResolution = useCardRepresentativeImage({
+    name: card.cardName,
+    series: card.series,
+    number: card.cardNumber,
+    rarity: card.rarity,
+    cardId: analysis?.catalogMatch?.matchedCardId,
+  }, scanId);
+
+  useEffect(() => {
+    const resolvedCardId = imageResolution.data?.cardId;
+    if (!resolvedCardId || !scanId || !analysis || isEditing) return;
+    const analyzedIdentity: CardFields = {
+      cardName: analysis.cardName ?? '',
+      series: analysis.series ?? '',
+      cardNumber: analysis.cardNumber ?? '',
+      rarity: analysis.rarity ?? '',
+    };
+    if (
+      analyzedIdentity.cardName.trim() !== card.cardName.trim()
+      || analyzedIdentity.series.trim() !== card.series.trim()
+      || analyzedIdentity.cardNumber.trim() !== card.cardNumber.trim()
+      || analyzedIdentity.rarity.trim() !== card.rarity.trim()
+      || analysis.catalogMatch?.matchedCardId === resolvedCardId
+    ) return;
+
+    const resolvedAnalysis: CardAnalysis = {
+      ...analysis,
+      catalogMatch: {
+        status: 'exact',
+        matchedCardId: resolvedCardId,
+        method: 'verified_card_image_identity',
+        candidates: [],
+      },
+    };
+    setAnalysis(resolvedAnalysis);
+    setScan(resolvedAnalysis);
+  }, [analysis, card, imageResolution.data?.cardId, isEditing, scanId, setScan]);
 
   const runAnalysis = async () => {
     if (!uri) { setLoadError('解析する画像がありません。撮り直してください。'); return; }
@@ -51,13 +86,17 @@ export default function AnalysisResultScreen() {
     try {
       const result = await analyze.mutateAsync({ data: await readPhoto(uri) });
       setAnalysis(result);
-      setScan({ uri, analysis: result });
+      setScan(result);
       setCard({
         cardName: result.cardName ?? '', series: result.series ?? '',
         cardNumber: result.cardNumber ?? '', rarity: result.rarity ?? '',
       });
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '解析に失敗しました。通信状態を確認して、もう一度お試しください。');
+      setLoadError(error instanceof PhotoReadError
+        ? error.message
+        : error instanceof Error && error.name === 'ApiError'
+          ? 'サーバーでカードを解析できませんでした。もう一度お試しください。'
+          : 'サーバーに接続できませんでした。通信状態を確認して、もう一度お試しください。');
     }
   };
 
@@ -83,7 +122,7 @@ export default function AnalysisResultScreen() {
       cardNumber: draft.cardNumber.trim(), rarity: draft.rarity.trim(),
     });
     if (analysis && uri) {
-      setScan({ uri, analysis: { ...analysis, cardName: draft.cardName.trim() || null, series: draft.series.trim() || null, cardNumber: draft.cardNumber.trim() || null, rarity: draft.rarity.trim() || null } });
+      setScan({ ...analysis, cardName: draft.cardName.trim() || null, series: draft.series.trim() || null, cardNumber: draft.cardNumber.trim() || null, rarity: draft.rarity.trim() || null });
     }
     setIsEditing(false);
   };
@@ -103,7 +142,7 @@ export default function AnalysisResultScreen() {
       <Pressable testID="analysis-retry-button" onPress={runAnalysis} style={[styles.primaryButton, { backgroundColor: colors.primary, width: '80%' }]}>
         <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>もう一度解析</Text>
       </Pressable>
-      <Pressable onPress={() => router.replace('/scan')}><Text style={[styles.retakeText, { color: colors.mutedForeground }]}>撮り直す</Text></Pressable>
+      <Pressable onPress={() => { clearScan(); router.replace('/scan'); }}><Text style={[styles.retakeText, { color: colors.mutedForeground }]}>撮り直す</Text></Pressable>
     </View>;
   }
 
@@ -246,11 +285,18 @@ export default function AnalysisResultScreen() {
 
         <View style={styles.resultRow}>
           <View style={[styles.imageWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {uri ? (
-              <Image source={{ uri }} resizeMode="contain" style={styles.image} />
-            ) : (
-              <CardArtwork card={{ name: card.cardName, number: card.cardNumber, tone: 'orange' }} />
-            )}
+            <CardThumbnail
+              card={{
+                name: card.cardName,
+                series: card.series,
+                number: card.cardNumber,
+                rarity: card.rarity,
+                cardId: analysis.catalogMatch?.matchedCardId,
+              }}
+              scanImageUri={uri}
+              scanId={scanId}
+              tone="orange"
+            />
           </View>
           <View style={styles.cardInfo}>
             <Text style={[styles.cardName, { color: colors.foreground }]}>{card.cardName}</Text>
@@ -283,6 +329,55 @@ export default function AnalysisResultScreen() {
         <View style={styles.actionGroup}>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="AI相場チェックへ進む"
+            testID="analysis-market-button"
+            onPress={() =>
+              router.push({
+                pathname: '/market-overview',
+                params: {
+                  scanId: scanId ?? '',
+                  cardName: card.cardName,
+                  series: card.series,
+                  cardNumber: card.cardNumber,
+                  rarity: card.rarity,
+                  catalogCardId: analysis.catalogMatch?.matchedCardId ?? '',
+                },
+              })
+            }
+            style={({ pressed }) => [
+              styles.primaryButton,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.78 : 1 },
+            ]}
+          >
+            <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>AI相場チェックへ</Text>
+            <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="状態チェックへ進む"
+            testID="analysis-next-button"
+            onPress={() =>
+              router.push({
+                pathname: '/condition-check',
+                params: {
+                  scanId: scanId ?? '',
+                  cardName: card.cardName,
+                  series: card.series,
+                  cardNumber: card.cardNumber,
+                  rarity: card.rarity,
+                },
+              })
+            }
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Feather name="check-circle" size={18} color={colors.foreground} />
+            <Text style={[styles.secondaryButtonText, { color: colors.foreground }]}>状態チェックへ</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
             accessibilityLabel="カード情報を修正"
             testID="edit-card-button"
             onPress={startEditing}
@@ -295,29 +390,6 @@ export default function AnalysisResultScreen() {
             <Text style={[styles.secondaryButtonText, { color: colors.foreground }]}>
               カード情報を修正
             </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="状態チェックへ進む"
-            testID="analysis-next-button"
-            onPress={() =>
-              router.push({
-                pathname: '/condition-check',
-                params: {
-                  uri: uri ?? '',
-                  cardName: card.cardName,
-                  cardNumber: card.cardNumber,
-                  rarity: card.rarity,
-                },
-              })
-            }
-            style={({ pressed }) => [
-              styles.primaryButton,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.78 : 1 },
-            ]}
-          >
-            <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>状態チェックへ</Text>
-            <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
           </Pressable>
           <Pressable
             accessibilityRole="button"

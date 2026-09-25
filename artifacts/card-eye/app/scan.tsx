@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useScan } from '@/hooks/ScanContext';
+import { holdPhoto, PhotoReadError } from '@/lib/readPhoto';
 
 type ScanPhoto = {
   uri: string;
@@ -53,7 +54,7 @@ function ScanIconButton({
 export default function ScanScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { clearScan } = useScan();
+  const { clearScan, setPhotoUri } = useScan();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [flash, setFlash] = useState<FlashMode>('off');
@@ -62,6 +63,8 @@ export default function ScanScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const chooseFromLibrary = async () => {
+    if (isCapturing) return;
+    setIsCapturing(true);
     setErrorMessage(null);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -72,11 +75,14 @@ export default function ScanScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        clearScan();
-        setPhoto({ uri: asset.uri, width: asset.width, height: asset.height });
+        const uri = await holdPhoto(asset.uri);
+        setPhotoUri(uri);
+        setPhoto({ uri, width: asset.width, height: asset.height });
       }
-    } catch {
-      setErrorMessage('写真を選択できませんでした。もう一度お試しください。');
+    } catch (error) {
+      setErrorMessage(error instanceof PhotoReadError ? error.message : '写真を選択できませんでした。もう一度お試しください。');
+    } finally {
+      setIsCapturing(false);
     }
   };
 
@@ -88,15 +94,16 @@ export default function ScanScreen() {
     try {
       const capturedPhoto = await cameraRef.current.takePictureAsync({ quality: 0.9 });
       if (capturedPhoto?.uri) {
-        clearScan();
+        const uri = await holdPhoto(capturedPhoto.uri);
+        setPhotoUri(uri);
         setPhoto({
-          uri: capturedPhoto.uri,
+          uri,
           width: capturedPhoto.width,
           height: capturedPhoto.height,
         });
       }
-    } catch {
-      setErrorMessage('撮影できませんでした。カードを枠内に合わせて、もう一度お試しください。');
+    } catch (error) {
+      setErrorMessage(error instanceof PhotoReadError ? error.message : '撮影できませんでした。カードを枠内に合わせて、もう一度お試しください。');
     } finally {
       setIsCapturing(false);
     }
@@ -123,7 +130,7 @@ export default function ScanScreen() {
             accessibilityLabel="撮影を閉じる"
             color={colors.foreground}
             icon="x"
-            onPress={() => router.back()}
+            onPress={() => { clearScan(); router.back(); }}
             testID="close-scan-preview-button"
           />
           <Text style={[styles.topBarTitle, { color: colors.foreground }]}>撮影プレビュー</Text>
@@ -148,6 +155,7 @@ export default function ScanScreen() {
               testID="retake-card-button"
               onPress={() => {
                 setPhoto(null);
+                clearScan();
                 setErrorMessage(null);
               }}
               style={({ pressed }) => [
@@ -164,9 +172,7 @@ export default function ScanScreen() {
               accessibilityLabel="カードを解析する"
               accessibilityRole="button"
               testID="analyze-card-button"
-              onPress={() =>
-                router.push({ pathname: '/analysis-result', params: { uri: photo.uri } })
-              }
+              onPress={() => router.push('/analysis-result')}
               style={({ pressed }) => [
                 styles.primaryAction,
                 { backgroundColor: colors.primary, opacity: pressed ? 0.82 : 1 },

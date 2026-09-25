@@ -1,10 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View, LayoutAnimation } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, LayoutAnimation } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CardArtwork } from '@/components/CardArtwork';
+import { CardThumbnail } from '@/components/CardThumbnail';
 import { useColors } from '@/hooks/useColors';
+import { useScan } from '@/hooks/ScanContext';
 import { useGetCardPrices, getGetCardPricesQueryKey, GetCardPricesPeriod, PriceTransactionSummary, PriceListing, PriceBuyback } from '@workspace/api-client-react';
 import { PriceChart } from '@/components/PriceChart';
 
@@ -13,29 +14,31 @@ type TabId = 'sales' | 'transactions' | 'buybacks';
 export default function PriceTrendScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { uri, cardName, cardNumber, rarity, id: paramId, demo: demoParam } = useLocalSearchParams<{
-    uri?: string;
+  const { uri: scanUri, scanId: activeScanId } = useScan();
+  const { scanId: routeScanId, cardName, cardNumber, series, rarity, id: paramId } = useLocalSearchParams<{
+    scanId?: string;
     cardName?: string;
     cardNumber?: string;
+    series?: string;
     rarity?: string;
     id?: string;
-    demo?: string;
   }>();
+  const uri = routeScanId && routeScanId === activeScanId ? scanUri : undefined;
 
   // Orval interpolates path parameters without escaping them; card numbers
   // commonly contain "/" and must remain one URL segment.
   const rawId = paramId || cardNumber;
   const id = rawId ? encodeURIComponent(rawId) : undefined;
+  const catalogCardId = rawId && /^[a-f0-9-]{36}$/i.test(rawId) ? rawId : null;
   
   const [period, setPeriod] = useState<GetCardPricesPeriod>(30);
-  const [demo, setDemo] = useState(demoParam === 'true');
   const [activeTab, setActiveTab] = useState<TabId>('transactions');
   const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
   const scrollRef = useRef<ScrollView>(null);
   const chartY = useRef(0);
   const sourcesY = useRef(0);
 
-  const priceQuery = { period, demo, name: cardName };
+  const priceQuery = { period, demo: false, name: cardName };
   const { data: prices, isLoading, error, refetch } = useGetCardPrices(id ?? '', priceQuery, {
     request: { cache: 'no-store' },
     query: { enabled: !!id, queryKey: getGetCardPricesQueryKey(id ?? '', priceQuery) }
@@ -46,7 +49,10 @@ export default function PriceTrendScreen() {
     setExpandedSources(prev => ({ ...prev, [source]: !prev[source] }));
   };
 
-  const hasData = prices && prices.marketPrice != null;
+  const hasData = prices?.marketPrice != null
+    && prices.marketPriceBasis === 'confirmed_ungraded_sales'
+    && prices.summary.transactionCount >= 3;
+  const confirmedMarketPrice = hasData ? prices.marketPrice : null;
   const isMissingIdentity = !id;
 
   const handleScrollToChart = () => {
@@ -82,14 +88,7 @@ export default function PriceTrendScreen() {
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </Pressable>
         <Text style={[styles.topTitle, { color: colors.foreground }]}>価格相場</Text>
-        <Pressable
-          onPress={() => setDemo(!demo)}
-          style={[styles.demoToggle, { backgroundColor: demo ? colors.accent : colors.secondary }]}
-        >
-          <Text style={[styles.demoToggleText, { color: demo ? colors.primary : colors.foreground }]}>
-            {demo ? '通常表示' : 'サンプル表示'}
-          </Text>
-        </Pressable>
+        <View style={styles.topSpacer} />
       </View>
 
       <ScrollView
@@ -97,25 +96,20 @@ export default function PriceTrendScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 34 }]}
         showsVerticalScrollIndicator={false}
       >
-        {demo && (
-          <View style={[styles.demoNotice, { backgroundColor: colors.destructive + '20', borderColor: colors.destructive }]}>
-            <Feather name="alert-triangle" size={16} color={colors.destructive} />
-            <Text style={[styles.demoNoticeText, { color: colors.destructive }]}>
-              デモ・実際の価格ではありません
-            </Text>
-          </View>
-        )}
-
         <View style={[styles.cardIdentity, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.artworkWrap}>
-            {uri ? (
-              <Image source={{ uri }} resizeMode="contain" style={styles.artworkImage} />
-            ) : (
-              <CardArtwork
-                compact
-                card={{ name: cardName ?? 'カード', number: cardNumber ?? '番号未確認', tone: 'orange' }}
-              />
-            )}
+            <CardThumbnail
+              compact
+              card={{
+                name: cardName ?? 'カード',
+                number: cardNumber ?? '番号未確認',
+                series: series ?? '',
+                rarity: rarity ?? '',
+                cardId: catalogCardId,
+              }}
+              scanImageUri={uri}
+              scanId={uri ? routeScanId : null}
+            />
           </View>
           <View style={styles.identityText}>
             <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={2}>
@@ -194,9 +188,6 @@ export default function PriceTrendScreen() {
                   <View style={[styles.statBox, { backgroundColor: colors.secondary }]}>
                     <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>価格信頼度</Text>
                      <Text style={[styles.statValue, { color: colors.foreground }]}>{prices.summary.confidenceScore == null ? '未評価' : `${prices.summary.confidenceScore} / 100`}</Text>
-                    {demo && (
-                       <Text style={{ color: colors.mutedForeground, fontSize: 10, marginTop: 4 }}>※サンプル推測値</Text>
-                    )}
                   </View>
                   <View style={[styles.statBox, { backgroundColor: colors.secondary }]}>
                     <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>データ期間</Text>
@@ -304,7 +295,7 @@ export default function PriceTrendScreen() {
                   onToggle={toggleSourceDetails}
                   median={prices?.summary?.transactionMedian}
                   totalCount={prices?.summary?.transactionCount}
-                  marketPrice={prices?.marketPrice}
+                  marketPrice={confirmedMarketPrice}
                   period={period}
                   onShowChart={handleScrollToChart}
                 />
@@ -315,7 +306,7 @@ export default function PriceTrendScreen() {
                   expanded={expandedSources}
                   onToggle={toggleSourceDetails}
                   median={prices?.summary?.buybackMedian}
-                  marketPrice={prices?.marketPrice}
+                  marketPrice={confirmedMarketPrice}
                 />
               )}
               {prices?.mode === 'live' && prices.sourceAvailability
@@ -542,15 +533,11 @@ const styles = StyleSheet.create({
   topBar: { minHeight: 72, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   iconButton: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   topTitle: { fontSize: 16, fontWeight: '700' },
-  demoToggle: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  demoToggleText: { fontSize: 12, fontWeight: '700' },
+  topSpacer: { width: 42, height: 42 },
   content: { paddingHorizontal: 20, paddingTop: 10, gap: 20 },
-  demoNotice: { borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  demoNoticeText: { fontSize: 13, fontWeight: '700' },
   
   cardIdentity: { flexDirection: 'row', alignItems: 'center', gap: 17, borderWidth: 1, borderRadius: 19, padding: 14 },
   artworkWrap: { width: 78, height: 108, borderRadius: 10, overflow: 'hidden' },
-  artworkImage: { width: '100%', height: '100%' },
   identityText: { flex: 1, gap: 6 },
   cardName: { fontSize: 19, fontWeight: '700' },
   cardNumber: { fontSize: 12 },
