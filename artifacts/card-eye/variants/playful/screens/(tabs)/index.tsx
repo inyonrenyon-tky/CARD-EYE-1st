@@ -53,7 +53,7 @@ export default function HomeScreen() {
     <Screen compact>
       <View style={styles.brandRow}>
         <View style={[styles.brandMark, { borderColor: colors.foreground }]}>
-          <Image source={require('@/assets/images/icon.png')} style={styles.brandIcon} />
+          <Image source={require('@/assets/images/classic-icon.png')} style={styles.brandIcon} />
         </View>
         <View>
           <Text style={[styles.brandName, { color: colors.foreground }]}>CARD EYE</Text>

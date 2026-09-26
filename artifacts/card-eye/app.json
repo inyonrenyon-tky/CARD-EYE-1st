@@ -2,33 +2,36 @@
   "expo": {
     "name": "CARD EYE",
     "slug": "card-eye",
+    "owner": "sekkekkyu",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "backgroundColor": "#FFF5D9",
+    "icon": "./assets/images/classic-icon.png",
+    "backgroundColor": "#061943",
     "scheme": "card-eye",
     "userInterfaceStyle": "light",
     "ios": {
+      "bundleIdentifier": "com.cardeye.app",
       "supportsTablet": false
     },
     "android": {
+      "package": "com.cardeye.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#FFF5D9"
+        "foregroundImage": "./assets/images/classic-icon.png",
+        "backgroundColor": "#061943"
       }
     },
     "web": {
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/classic-icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/icon.png",
+          "image": "./assets/images/classic-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#FFF5D9"
+          "backgroundColor": "#061943"
         }
       ],
       [

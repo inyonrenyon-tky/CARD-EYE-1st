@@ -34,7 +34,7 @@ export function CardArtwork({ card, compact = false }: CardArtworkProps) {
           </View>
         </View>
         <Image
-          source={require('@/assets/images/icon.png')}
+          source={require('@/assets/images/classic-icon.png')}
           resizeMode="contain"
           style={[styles.logo, compact && styles.compactLogo]}
         />
